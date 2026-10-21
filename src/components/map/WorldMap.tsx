@@ -21,19 +21,16 @@ import { cn } from "@/lib/cn";
 import type { Airport, Flight, Hotel, LngLat, Place, PlaceCategory, Theme, TransitLeg, TransitRoute } from "@/types/trip";
 
 /**
- * Gündüz: resmi OpenStreetMap raster karoları · Gece: CartoDB Positron (sade, açık zeminli) karoları.
- * İkisi de API anahtarsız ve ücretsiz. Karanlık temada `.leaflet-tile-pane` elemanına doğrudan
- * `DARK_TILE_FILTER` uygulanır (pinler/çizgiler filtrelenmez).
- * Leaflet Web Worker kullanmaz → Turbopack'te "Worker failed to load" sorunu yok.
+ * Gündüz ve gece: resmi OpenStreetMap raster karoları (API anahtarsız, ücretsiz).
+ * Karanlık temada `.leaflet-tile-pane` elemanına doğrudan `DARK_TILE_FILTER` uygulanır
+ * (pinler/çizgiler filtrelenmez). Leaflet Web Worker kullanmaz → Turbopack'te "Worker failed to load" sorunu yok.
  */
 const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-const DARK_TILE_URL = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
 const TILE_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> katkıcıları';
-const DARK_TILE_ATTRIBUTION = `${TILE_ATTRIBUTION} &copy; <a href="https://carto.com/attributions">CARTO</a>`;
 
-/** Yumuşak gece laciverti: Positron ters çevrilir → deniz #0D162B, kara #172544, sınırlar açık mavi-gri */
-const DARK_TILE_FILTER = "invert(92%) hue-rotate(195deg) saturate(160%) brightness(92%) contrast(88%)";
+/** Yumuşak gece laciverti (Soft Slate Navy): OSM karoları ters çevrilip laciverte kaydırılır; globals.css ile aynı değer */
+const DARK_TILE_FILTER = "invert(100%) hue-rotate(190deg) saturate(140%) brightness(88%) contrast(85%)";
 
 /** Yükleme kaplaması en geç bu süre sonunda kalkar (karolar arka planda yüklenmeye devam eder). */
 const OVERLAY_MAX_MS = 1000;
@@ -280,8 +277,6 @@ export default function WorldMap({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const tilesRef = useRef<L.TileLayer | null>(null);
-  const attributionRef = useRef<L.Control.Attribution | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [overlayVisible, setOverlayVisible] = useState(true);
 
@@ -334,11 +329,10 @@ export default function WorldMap({
       attributionControl: false,
     });
     L.control.zoom({ position: "bottomright" }).addTo(map);
-    attributionRef.current = L.control.attribution({ position: "bottomleft", prefix: false }).addTo(map);
+    L.control.attribution({ position: "bottomleft", prefix: false }).addTo(map);
 
-    const dark = useTripStore.getState().theme === "dark";
-    const tiles = L.tileLayer(dark ? DARK_TILE_URL : TILE_URL, {
-      attribution: dark ? DARK_TILE_ATTRIBUTION : TILE_ATTRIBUTION,
+    const tiles = L.tileLayer(TILE_URL, {
+      attribution: TILE_ATTRIBUTION,
       maxZoom: MAX_ZOOM,
       minZoom: MIN_ZOOM,
       noWrap: true,
@@ -350,7 +344,6 @@ export default function WorldMap({
       updateWhenIdle: false,
     }).addTo(map);
     tiles.once("load", () => setOverlayVisible(false));
-    tilesRef.current = tiles;
 
     mapRef.current = map;
     setMapReady(true);
@@ -366,30 +359,17 @@ export default function WorldMap({
       resize.disconnect();
       map.remove();
       mapRef.current = null;
-      tilesRef.current = null;
       setMapReady(false);
     };
     // Harita sadece mount'ta kurulur; hedef değişimleri (tema: CSS filtresi) aşağıdaki effect'lerde işlenir
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
-  // Karanlık tema: Positron karolarına geçilir ve sadece karo panosu filtrelenir (pinler, çizgiler, rozetler orijinal renginde kalır)
+  // Karanlık tema: aynı OSM karoları kalır, sadece karo panosu filtrelenir (pinler, çizgiler, rozetler orijinal renginde kalır)
   useEffect(() => {
-    const tiles = tilesRef.current;
-    const dark = theme === "dark";
-    if (tiles) {
-      const url = dark ? DARK_TILE_URL : TILE_URL;
-      if ((tiles as unknown as { _url: string })._url !== url) {
-        // Katman attribution'ı eklenirken okunur → kontrolde elle değiştirilir
-        attributionRef.current?.removeAttribution(dark ? TILE_ATTRIBUTION : DARK_TILE_ATTRIBUTION);
-        attributionRef.current?.addAttribution(dark ? DARK_TILE_ATTRIBUTION : TILE_ATTRIBUTION);
-        tiles.options.attribution = dark ? DARK_TILE_ATTRIBUTION : TILE_ATTRIBUTION;
-        tiles.setUrl(url);
-      }
-    }
     const tilePane = containerRef.current?.querySelector<HTMLElement>(".leaflet-tile-pane");
     if (!tilePane) return;
-    tilePane.style.filter = dark ? DARK_TILE_FILTER : "none";
+    tilePane.style.filter = theme === "dark" ? DARK_TILE_FILTER : "none";
   }, [theme, mapReady]);
 
   // 2) Adım 1: rota, pinler ve kamera

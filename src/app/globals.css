@@ -183,10 +183,10 @@ body {
   background: transparent !important;
   transition: opacity 0.2s ease-out;
 }
-/* Karanlık tema: CartoDB Positron karoları yumuşak gece lacivertine kalibre edilir (siyah/yeşil ton yok).
+/* Karanlık tema: OpenStreetMap karoları yumuşak gece lacivertine (Soft Slate Navy) kalibre edilir (siyah/yeşil ton yok).
    Sadece karo panosu filtrelenir; pinler, rotalar ve rozetler orijinal renklerinde kalır. */
 .dark .leaflet-tile-pane {
-  filter: invert(92%) hue-rotate(195deg) saturate(160%) brightness(92%) contrast(88%);
+  filter: invert(100%) hue-rotate(190deg) saturate(140%) brightness(88%) contrast(85%);
 }
 /* divIcon sarmalayıcısı: Leaflet'in varsayılan beyaz kutusu yok, içerik taşabilir */
 .map-divicon {
