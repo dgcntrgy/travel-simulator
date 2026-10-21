@@ -20,7 +20,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { SPRING_IN } from "@/lib/motion";
+import type { TranslationKey } from "@/lib/i18n";
 import { sanitizeInput } from "@/lib/security";
+import { useT } from "@/lib/useI18n";
 import { useTripStore } from "@/store/useTripStore";
 
 type PlanId = "trip" | "yearly";
@@ -29,49 +31,33 @@ type View = "pricing" | "checkout" | "success";
 const PLANS: Record<
   PlanId,
   {
-    title: string;
+    title: TranslationKey;
     price: string;
-    period: string;
-    note: string;
+    period: TranslationKey;
+    note: TranslationKey;
     popular?: boolean;
   }
 > = {
   trip: {
-    title: "Tek Seyahat Kilidi",
+    title: "proModal.tripTitle",
     price: "$4.99",
-    period: "tek seferlik",
-    note: "Bu rota için tüm Pro özellikler",
+    period: "proModal.tripPeriod",
+    note: "proModal.tripNote",
   },
   yearly: {
-    title: "Sınırsız Pro Gezgin",
+    title: "proModal.yearlyTitle",
     price: "$19.99",
-    period: "/ yıl",
-    note: "Sınırsız rota, her yolculukta tüm Pro özellikler",
+    period: "proModal.yearlyPeriod",
+    note: "proModal.yearlyNote",
     popular: true,
   },
 };
 
-const PERKS: { icon: LucideIcon; title: string; text: string }[] = [
-  {
-    icon: Route,
-    title: "Nokta Atışı Otel-Metro/Tren Rotası",
-    text: "Otelinden her mekana hangi hatla, kaç dakikada gideceğin haritada renkli hatlarla.",
-  },
-  {
-    icon: Wallet,
-    title: "Görünmez Maliyetler & Tam Bütçe",
-    text: "Bilet, ulaşım, giriş ve yemek kalem kalem; sürpriz harcama yok.",
-  },
-  {
-    icon: FileText,
-    title: "Her Güne 1 Sayfa PDF Cep Rehberi",
-    text: "Çevrimdışı kullanılabilir, her A4 sayfasında tek bir gün.",
-  },
-  {
-    icon: Languages,
-    title: "Lokal Şoför / Garson Dil Kartları",
-    text: "Adresi ve siparişini yerel dilde göster, anlaşma derdi bitsin.",
-  },
+const PERKS: { icon: LucideIcon; title: TranslationKey; text: TranslationKey }[] = [
+  { icon: Route, title: "proModal.perk1Title", text: "proModal.perk1Text" },
+  { icon: Wallet, title: "proModal.perk2Title", text: "proModal.perk2Text" },
+  { icon: FileText, title: "proModal.perk3Title", text: "proModal.perk3Text" },
+  { icon: Languages, title: "proModal.perk4Title", text: "proModal.perk4Text" },
 ];
 
 const VIEW_MOTION = {
@@ -105,6 +91,7 @@ export default function ProUpgradeModal() {
 }
 
 function UpgradeDialog() {
+  const t = useT();
   const close = useTripStore((s) => s.closeUpgradeModal);
   const isPro = useTripStore((s) => s.isPro);
   const setPro = useTripStore((s) => s.setPro);
@@ -155,7 +142,7 @@ function UpgradeDialog() {
       <motion.div
         role="dialog"
         aria-modal="true"
-        aria-label="Pro üyelik"
+        aria-label={t("proModal.aria")}
         initial={{ opacity: 0, y: 24, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 16, scale: 0.97 }}
@@ -170,7 +157,7 @@ function UpgradeDialog() {
           <button
             type="button"
             onClick={close}
-            aria-label="Kapat"
+            aria-label={t("common.close")}
             className="absolute right-4 top-4 z-50 grid h-9 w-9 place-items-center rounded-full glass-secondary text-ink/70"
           >
             <X size={16} />
@@ -186,8 +173,8 @@ function UpgradeDialog() {
               <motion.div key="pricing" {...VIEW_MOTION}>
                 <Header
                   eyebrow="Travel Simulator Pro"
-                  title="Rehberini cebine sığdır"
-                  text="Planını gerçek bir yolculuğa dönüştüren tüm araçlar tek dokunuşta."
+                  title={t("proModal.title")}
+                  text={t("proModal.text")}
                 />
 
                 <ul className="mt-6 grid gap-3 sm:grid-cols-2">
@@ -197,14 +184,14 @@ function UpgradeDialog() {
                         <Icon size={18} />
                       </span>
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold leading-snug">{title}</p>
-                        <p className="mt-0.5 text-xs leading-relaxed text-ink/60">{text}</p>
+                        <p className="text-sm font-semibold leading-snug">{t(title)}</p>
+                        <p className="mt-0.5 text-xs leading-relaxed text-ink/60">{t(text)}</p>
                       </div>
                     </li>
                   ))}
                 </ul>
 
-                <div role="radiogroup" aria-label="Paket" className="mt-6 grid gap-3 sm:grid-cols-2">
+                <div role="radiogroup" aria-label={t("proModal.package")} className="mt-6 grid gap-3 sm:grid-cols-2">
                   {(Object.keys(PLANS) as PlanId[]).map((id) => {
                     const p = PLANS[id];
                     const active = plan === id;
@@ -224,11 +211,11 @@ function UpgradeDialog() {
                       >
                         {p.popular && (
                           <span className="absolute -top-2.5 right-3 rounded-full bg-gradient-to-r from-amber-400 to-orange-500 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
-                            En Popüler
+                            {t("proModal.popular")}
                           </span>
                         )}
                         <div className="flex items-center justify-between gap-2">
-                          <p className="text-sm font-semibold">{p.title}</p>
+                          <p className="text-sm font-semibold">{t(p.title)}</p>
                           <span
                             className={cn(
                               "grid h-5 w-5 place-items-center rounded-full border-2",
@@ -242,9 +229,9 @@ function UpgradeDialog() {
                         </div>
                         <p className="mt-2">
                           <span className="font-mono text-2xl font-bold tabular-nums">{p.price}</span>
-                          <span className="ml-1 text-xs text-ink/55">{p.period}</span>
+                          <span className="ml-1 text-xs text-ink/55">{t(p.period)}</span>
                         </p>
-                        <p className="mt-1 text-xs text-ink/55">{p.note}</p>
+                        <p className="mt-1 text-xs text-ink/55">{t(p.note)}</p>
                       </button>
                     );
                   })}
@@ -255,9 +242,9 @@ function UpgradeDialog() {
                   onClick={() => setView("checkout")}
                   className="mt-6 w-full rounded-2xl glass-primary px-5 py-3.5 text-sm font-semibold"
                 >
-                  Satın Alma Adımına Geç ➔
+                  {t("proModal.toCheckout")}
                 </button>
-                <p className="mt-2 text-center text-[11px] text-ink/45">İstediğin zaman iptal · 14 gün koşulsuz iade</p>
+                <p className="mt-2 text-center text-[11px] text-ink/45">{t("proModal.cancelNote")}</p>
               </motion.div>
             ) : view === "checkout" ? (
               <motion.div key="checkout" {...VIEW_MOTION}>
@@ -266,12 +253,12 @@ function UpgradeDialog() {
                   onClick={() => !processing && setView("pricing")}
                   className="mb-3 flex items-center gap-1 text-xs font-medium text-ink/55 hover:text-ink"
                 >
-                  <ArrowLeft size={13} /> Paketler
+                  <ArrowLeft size={13} /> {t("proModal.packages")}
                 </button>
                 <Header
-                  eyebrow="Güvenli Ödeme"
-                  title="Ödeme bilgileri"
-                  text="Kart bilgilerin 256-bit SSL ile şifrelenir."
+                  eyebrow={t("proModal.secure")}
+                  title={t("proModal.payTitle")}
+                  text={t("proModal.payText")}
                 />
 
                 <div className="mt-5 flex items-center justify-between gap-3 rounded-2xl border border-blue-500/25 bg-blue-500/[0.07] px-4 py-3">
@@ -280,13 +267,13 @@ function UpgradeDialog() {
                       <Crown size={16} />
                     </span>
                     <div className="leading-tight">
-                      <p className="text-sm font-semibold">{selected.title}</p>
-                      <p className="text-[11px] text-ink/55">{selected.note}</p>
+                      <p className="text-sm font-semibold">{t(selected.title)}</p>
+                      <p className="text-[11px] text-ink/55">{t(selected.note)}</p>
                     </div>
                   </div>
                   <p className="text-right font-mono text-lg font-bold tabular-nums">
                     {selected.price}
-                    <span className="block text-[10px] font-normal text-ink/50">{selected.period}</span>
+                    <span className="block text-[10px] font-normal text-ink/50">{t(selected.period)}</span>
                   </p>
                 </div>
 
@@ -297,17 +284,17 @@ function UpgradeDialog() {
                     pay();
                   }}
                 >
-                  <Field label="Kart Üzerindeki İsim">
+                  <Field label={t("proModal.cardName")}>
                     <input
                       className={INPUT}
                       autoComplete="cc-name"
-                      placeholder="Ad Soyad"
+                      placeholder={t("proModal.cardNamePh")}
                       value={card.name}
                       maxLength={60}
                       onChange={(e) => setCard((c) => ({ ...c, name: sanitizeInput(e.target.value, 60, { live: true }) }))}
                     />
                   </Field>
-                  <Field label="Kart Numarası">
+                  <Field label={t("proModal.cardNumber")}>
                     <div className="relative">
                       <input
                         className={cn(INPUT, "pr-10 font-mono tracking-wider")}
@@ -326,7 +313,7 @@ function UpgradeDialog() {
                     </div>
                   </Field>
                   <div className="grid grid-cols-2 gap-3">
-                    <Field label="Son Kullanma (AA/YY)">
+                    <Field label={t("proModal.expiry")}>
                       <input
                         className={cn(INPUT, "font-mono")}
                         inputMode="numeric"
@@ -380,13 +367,13 @@ function UpgradeDialog() {
                   >
                     {processing ? (
                       <>
-                        <Loader2 size={16} className="animate-spin" /> Ödeme onaylanıyor…
+                        <Loader2 size={16} className="animate-spin" /> {t("proModal.processing")}
                       </>
                     ) : (
-                      <>🔒 Ödemeyi Tamamla & Pro&apos;yu Aktifleştir</>
+                      t("proModal.pay")
                     )}
                   </button>
-                  <p className="text-center text-[10px] text-ink/40">Simülasyon: gerçek bir ödeme alınmaz.</p>
+                  <p className="text-center text-[10px] text-ink/40">{t("proModal.simNote")}</p>
                 </form>
               </motion.div>
             ) : (
@@ -410,8 +397,8 @@ function UpgradeDialog() {
                 >
                   <Crown size={36} />
                 </motion.span>
-                <h2 className="mt-5 text-2xl font-bold">🎉 Tebrikler!</h2>
-                <p className="mt-1.5 text-sm text-ink/65">Pro Rehberiniz ve Tüm Özellikler Açıldı</p>
+                <h2 className="mt-5 text-2xl font-bold">{t("proModal.successTitle")}</h2>
+                <p className="mt-1.5 text-sm text-ink/65">{t("proModal.successText")}</p>
               </motion.div>
             )}
           </AnimatePresence>
@@ -443,31 +430,32 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function ProStatusView({ onDowngrade, onClose }: { onDowngrade: () => void; onClose: () => void }) {
+  const t = useT();
   return (
     <motion.div key="status" {...VIEW_MOTION} className="py-4 text-center">
       <span className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-gradient-to-br from-amber-300 to-orange-500 text-white shadow-lg">
         <Crown size={28} />
       </span>
-      <h2 className="mt-4 text-2xl font-bold">Pro üyeliğin aktif</h2>
-      <p className="mt-1 text-sm text-ink/60">Tüm ayrıcalıklar açık:</p>
+      <h2 className="mt-4 text-2xl font-bold">{t("proModal.activeTitle")}</h2>
+      <p className="mt-1 text-sm text-ink/60">{t("proModal.activeText")}</p>
       <ul className="mx-auto mt-4 max-w-sm space-y-2 text-left">
         {PERKS.map(({ icon: Icon, title }) => (
           <li key={title} className="flex items-center gap-2.5 text-sm">
-            <Icon size={15} className="shrink-0 text-amber-500" /> {title}
+            <Icon size={15} className="shrink-0 text-amber-500" /> {t(title)}
             <Check size={14} className="ml-auto shrink-0 text-emerald-500" />
           </li>
         ))}
       </ul>
       <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
         <button type="button" onClick={onClose} className="rounded-xl glass-primary px-5 py-2.5 text-sm font-semibold">
-          Harika, devam et
+          {t("proModal.continue")}
         </button>
         <button
           type="button"
           onClick={onDowngrade}
           className="flex items-center justify-center gap-1.5 rounded-xl glass-secondary px-5 py-2.5 text-sm font-medium text-ink/70"
         >
-          <Lock size={13} /> Ücretsiz Moda Dön (Test)
+          <Lock size={13} /> {t("proModal.downgrade")}
         </button>
       </div>
     </motion.div>

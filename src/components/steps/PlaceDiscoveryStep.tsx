@@ -30,6 +30,8 @@ import WorldMap from "@/components/map/WorldMap";
 import { CATEGORY_META, estimateTripDays, getRegions } from "@/data/mockPlaces";
 import { useDestinationPlaces } from "@/lib/useDestinationPlaces";
 import { fetchWikiImage } from "@/lib/wikipedia";
+import type { TranslationKey } from "@/lib/i18n";
+import { useT } from "@/lib/useI18n";
 import { useTripStore } from "@/store/useTripStore";
 import { cn } from "@/lib/cn";
 import type { Place, PlaceCategory, TripRoute } from "@/types/trip";
@@ -40,11 +42,11 @@ const MIN_PLACES = 2;
 type CategoryFilter = "all" | PlaceCategory;
 type SourceFilter = "all" | "curated" | "live";
 
-const CATEGORY_FILTERS: { id: CategoryFilter; label: string }[] = [
-  { id: "all", label: "Tümü" },
-  { id: "sight", label: CATEGORY_META.sight.label },
-  { id: "food", label: CATEGORY_META.food.label },
-  { id: "culture", label: CATEGORY_META.culture.label },
+const CATEGORY_FILTERS: { id: CategoryFilter; label: TranslationKey }[] = [
+  { id: "all", label: "common.all" },
+  { id: "sight", label: "places.catSight" },
+  { id: "food", label: "places.catFood" },
+  { id: "culture", label: "places.catCulture" },
 ];
 
 const CATEGORY_ICON: Record<PlaceCategory, LucideIcon> = {
@@ -462,6 +464,7 @@ function PlaceDetailModal({
 }
 
 function DiscoveryActionBar() {
+  const t = useT();
   const selectedPlaces = useTripStore((s) => s.selectedPlaces);
   const prevStep = useTripStore((s) => s.prevStep);
   const nextStep = useTripStore((s) => s.nextStep);
@@ -478,7 +481,7 @@ function DiscoveryActionBar() {
         className="flex shrink-0 items-center gap-1.5 rounded-xl glass-secondary px-3 py-3 text-sm text-ink/70 hover:text-ink"
       >
         <ArrowLeft size={15} />
-        <span className="hidden sm:inline">Uçuş Seçimi</span>
+        <span className="hidden sm:inline">{t("places.back")}</span>
       </button>
 
       <div className="min-w-0 flex-1 px-1">
@@ -492,11 +495,11 @@ function DiscoveryActionBar() {
           >
             {ready ? (
               <>
-                <b className="text-ink">{count} mekan</b> · ~{days} gün
+                <b className="text-ink">{t("places.summary", { n: count, d: days })}</b>
               </>
             ) : (
               <>
-                En az {MIN_PLACES} mekan seç{" "}
+                {t("places.needMore", { min: MIN_PLACES })}{" "}
                 <span className="font-mono text-ink/80">
                   ({count}/{MIN_PLACES})
                 </span>
@@ -517,8 +520,8 @@ function DiscoveryActionBar() {
             : "cursor-not-allowed bg-ink/[0.07] text-ink/35",
         )}
       >
-        <span className="hidden md:inline">Akıllı Otel & Taşıt Planla</span>
-        <span className="md:hidden">Devam</span>
+        <span className="hidden md:inline">{t("places.next")}</span>
+        <span className="md:hidden">{t("nav.continue")}</span>
         <ArrowRight size={16} />
       </button>
     </div>
@@ -527,6 +530,7 @@ function DiscoveryActionBar() {
 
 /** Adım 2: sol/orta geniş kart ızgarası, sağda yapışkan şehir haritası */
 export default function PlaceDiscoveryStep({ destination }: TripRoute) {
+  const t = useT();
   const selectedPlaces = useTripStore((s) => s.selectedPlaces);
   const togglePlace = useTripStore((s) => s.togglePlace);
   const hoveredPlaceId = useTripStore((s) => s.hoveredPlaceId);
@@ -626,14 +630,14 @@ export default function PlaceDiscoveryStep({ destination }: TripRoute) {
                   return (
                     <Chip key={f.id} active={category === f.id} onClick={() => setCategory(f.id)}>
                       {Icon && <Icon size={12} style={{ color: CATEGORY_META[f.id as PlaceCategory].color }} />}
-                      {f.label}
+                      {t(f.label)}
                     </Chip>
                   );
                 })}
               </div>
               <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 md:pb-0">
                 <Chip active={region === "all"} onClick={() => setRegion("all")}>
-                  Tüm şehirler
+                  {t("places.allCities")}
                 </Chip>
                 {regions.map((r) => (
                   <Chip key={r} active={region === r} onClick={() => setRegion(r)}>
@@ -687,13 +691,13 @@ export default function PlaceDiscoveryStep({ destination }: TripRoute) {
                 <div className="flex gap-1.5">
                   {(
                     [
-                      ["all", "Tümü"],
-                      ["curated", "★ Seçki"],
-                      ["live", "Canlı"],
+                      ["all", "common.all"],
+                      ["curated", "places.curated"],
+                      ["live", "places.live"],
                     ] as const
                   ).map(([id, label]) => (
                     <Chip key={id} active={source === id} onClick={() => setSource(id)}>
-                      {label}
+                      {t(label)}
                     </Chip>
                   ))}
                 </div>

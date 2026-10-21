@@ -1,13 +1,23 @@
 import { create } from "zustand";
+import { DEFAULT_LOCALE, isLocale, localeFromLanguages, type Locale, type TranslationKey } from "@/lib/i18n";
+import { PREF, readPref, writePref } from "@/lib/prefs";
 import type { Airport, BudgetBreakdown, Flight, Hotel, Place, PublicUser, StepId, Theme } from "@/types/trip";
 
 /** İlerleme çubuğundaki simülasyon adımları (0 = karşılama ekranı listede yok) */
-export const STEPS: { id: Exclude<StepId, 0>; title: string; short: string }[] = [
-  { id: 1, title: "Uçuş & Dünya Haritası", short: "Uçuş" },
-  { id: 2, title: "Mekan Hikaye Kartları", short: "Keşif" },
-  { id: 3, title: "Akıllı Otel & Taşıt", short: "Konaklama" },
-  { id: 4, title: "Final Rehber", short: "Rehber" },
+export const STEPS: { id: Exclude<StepId, 0>; title: TranslationKey; short: TranslationKey }[] = [
+  { id: 1, title: "steps.1.title", short: "steps.1.short" },
+  { id: 2, title: "steps.2.title", short: "steps.2.short" },
+  { id: 3, title: "steps.3.title", short: "steps.3.short" },
+  { id: 4, title: "steps.4.title", short: "steps.4.short" },
 ];
+
+/** Açılış dili: kayıtlı tercih (çerez / localStorage) → tarayıcı dili → İngilizce. Ülkeye göre düzeltme `useGeoBootstrap`'ta. */
+function initialLocale(): Locale {
+  const saved = readPref(PREF.locale);
+  if (isLocale(saved)) return saved;
+  if (typeof navigator !== "undefined") return localeFromLanguages(navigator.languages) ?? DEFAULT_LOCALE;
+  return DEFAULT_LOCALE;
+}
 
 function isoDateFromToday(daysAhead: number): string {
   const d = new Date();
@@ -21,6 +31,8 @@ interface TripState {
   /** Pro tanıtım / satın alma modalı (TopBar + kilitli Pro kutuları açar) */
   isUpgradeModalOpen: boolean;
   theme: Theme;
+  /** Arayüz dili (6 dil); reset() sıfırlamaz */
+  locale: Locale;
   /** Oturum açmış kullanıcı (sunucudaki `data/users.json` kaydının açık alanları); reset() sıfırlamaz */
   user: PublicUser | null;
   /** Giriş / Kayıt modalı; `authView` hangi sekmeyle açılacağı */
@@ -57,6 +69,8 @@ interface TripState {
   openUpgradeModal: () => void;
   closeUpgradeModal: () => void;
   toggleTheme: () => void;
+  /** `persist` (varsayılan true) → tercih çereze + localStorage'a yazılır (otomatik algılamada false) */
+  setLocale: (locale: Locale, persist?: boolean) => void;
   setUser: (user: PublicUser | null) => void;
   openAuthModal: (view?: "login" | "register") => void;
   closeAuthModal: () => void;
@@ -130,6 +144,7 @@ export const useTripStore = create<TripState>()((set, get) => ({
   isPro: false,
   isUpgradeModalOpen: false,
   theme: "light",
+  locale: initialLocale(),
   user: null,
   isAuthModalOpen: false,
   authView: "login",
@@ -143,6 +158,10 @@ export const useTripStore = create<TripState>()((set, get) => ({
   openUpgradeModal: () => set({ isUpgradeModalOpen: true }),
   closeUpgradeModal: () => set({ isUpgradeModalOpen: false }),
   toggleTheme: () => set((s) => ({ theme: s.theme === "light" ? "dark" : "light" })),
+  setLocale: (locale, persist = true) => {
+    if (persist) writePref(PREF.locale, locale);
+    set({ locale });
+  },
   // Kayıtta Pro olan kullanıcı giriş yapınca bu cihazda da Pro açılır
   setUser: (user) => set((s) => ({ user, isPro: s.isPro || Boolean(user?.isPro) })),
   openAuthModal: (authView = "login") => set({ isAuthModalOpen: true, authView }),

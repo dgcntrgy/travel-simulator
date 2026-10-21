@@ -5,15 +5,39 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Check, ChevronDown, Search, X, type LucideIcon } from "lucide-react";
 import { searchKey } from "@/lib/globalDiscovery";
 import { cn } from "@/lib/cn";
+import { cityName, countryName, type Locale } from "@/lib/i18n";
 import { sanitizeSearch } from "@/lib/security";
+import { useT } from "@/lib/useI18n";
 import type { Airport } from "@/types/trip";
 
-const defaultMatches = (a: Airport, q: string) =>
-  [a.city, a.country, a.code, a.airportName].some((h) => searchKey(h).includes(q));
+/** Listede aynı anda en fazla bu kadar satır çizilir (~390 havalimanında bile anında filtre) */
+const MAX_RESULTS = 50;
+
+/** Havalimanı başına önceden hesaplanmış arama anahtarları: [kod, şehir (tr), şehir (en), ülke (tr), ülke (dil), havalimanı] */
+const keyCache = new Map<string, string[]>();
+function searchKeys(a: Airport, locale: Locale): string[] {
+  const id = `${locale}:${a.code}`;
+  let keys = keyCache.get(id);
+  if (!keys) {
+    keys = [a.code, a.city, cityName(a, "en"), a.country, countryName(a, locale), a.airportName].map(searchKey);
+    keyCache.set(id, keys);
+  }
+  return keys;
+}
+
+/** 0 = IATA kodu birebir, 1 = şehir adıyla başlıyor, 2 = ülke adıyla başlıyor, 3 = herhangi bir alanda geçiyor, -1 = yok */
+function rank(a: Airport, q: string, locale: Locale): number {
+  const [code, city, cityEn, country, countryLocal, airport] = searchKeys(a, locale);
+  if (code === q) return 0;
+  if (city.startsWith(q) || cityEn.startsWith(q)) return 1;
+  if (country.startsWith(q) || countryLocal.startsWith(q)) return 2;
+  return [code, city, cityEn, country, countryLocal, airport].some((k) => k.includes(q)) ? 3 : -1;
+}
 
 /**
  * Yerel <select> yerine cam temalı şehir/havalimanı açılır listesi:
  * tetikleyici etiket + Framer Motion popover (sabit arama, bayrak · şehir & ülke · IATA rozeti, ✓ seçili).
+ * Dünyadaki tüm havalimanları için hızlı arama: önbellekli anahtarlar + sıralı eşleşme, ilk 50 sonuç çizilir.
  * Dışarı tıklama / Escape kapatır; ↑ ↓ Enter ile klavyeden seçilebilir.
  */
 export default function CitySelectDropdown({
@@ -23,10 +47,10 @@ export default function CitySelectDropdown({
   options,
   onChange,
   isDisabled,
-  disabledHint = "Kalkışınla aynı şehir",
+  disabledHint,
   getSubtitle,
   matches,
-  placeholder = "Şehir seç",
+  placeholder,
   className,
 }: {
   label: string;
@@ -37,13 +61,14 @@ export default function CitySelectDropdown({
   /** Seçilemez satırlar (örn. kalkışla aynı şehir) */
   isDisabled?: (a: Airport) => boolean;
   disabledHint?: string;
-  /** Satırın ikinci satırı; varsayılan ülke */
+  /** Satırın ikinci satırı; varsayılan ülke (seçili dilde) */
   getSubtitle?: (a: Airport) => string;
-  /** Özel arama eşleşmesi (q önceden searchKey'den geçmiş metin) */
+  /** Ek arama eşleşmesi (q önceden searchKey'den geçmiş metin); varsayılan sıralamaya ek olarak */
   matches?: (a: Airport, q: string) => boolean;
   placeholder?: string;
   className?: string;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -53,10 +78,17 @@ export default function CitySelectDropdown({
   const listId = useId();
 
   const q = searchKey(query.trim());
-  const visible = useMemo(
-    () => (q ? options.filter((o) => (matches ?? defaultMatches)(o, q)) : options),
-    [options, q, matches],
-  );
+  const { visible, total } = useMemo(() => {
+    if (!q) return { visible: options.slice(0, MAX_RESULTS), total: options.length };
+    const hits: { a: Airport; r: number; i: number }[] = [];
+    options.forEach((a, i) => {
+      let r = rank(a, q, t.locale);
+      if (r < 0 && matches?.(a, q)) r = 3;
+      if (r >= 0) hits.push({ a, r, i });
+    });
+    hits.sort((x, y) => x.r - y.r || x.i - y.i);
+    return { visible: hits.slice(0, MAX_RESULTS).map((h) => h.a), total: hits.length };
+  }, [options, q, matches, t.locale]);
 
   // Dışarı tıklama ile kapat
   useEffect(() => {
@@ -72,7 +104,7 @@ export default function CitySelectDropdown({
   const toggle = () => {
     if (open) return setOpen(false);
     setQuery("");
-    const idx = value ? options.findIndex((o) => o.code === value.code) : 0;
+    const idx = value ? options.slice(0, MAX_RESULTS).findIndex((o) => o.code === value.code) : 0;
     setActive(Math.max(0, idx));
     setOpen(true);
     requestAnimationFrame(() => {
@@ -131,10 +163,10 @@ export default function CitySelectDropdown({
           <span className={cn("block truncate text-[15px] font-semibold", value ? "text-ink" : "text-ink/40")}>
             {value ? (
               <>
-                {value.flag} {value.city} <span className="font-mono text-xs font-medium text-ink/45">{value.code}</span>
+                {value.flag} {cityName(value, t.locale)} <span className="font-mono text-xs font-medium text-ink/45">{value.code}</span>
               </>
             ) : (
-              placeholder
+              (placeholder ?? t("dd.placeholder"))
             )}
           </span>
         </span>
@@ -167,7 +199,7 @@ export default function CitySelectDropdown({
                   role="combobox"
                   aria-expanded
                   aria-controls={listId}
-                  aria-label={`${label} ara`}
+                  aria-label={t("dd.searchAria", { label })}
                   value={query}
                   onChange={(e) => {
                     setQuery(sanitizeSearch(e.target.value));
@@ -175,13 +207,13 @@ export default function CitySelectDropdown({
                     listRef.current?.scrollTo({ top: 0 });
                   }}
                   onKeyDown={onKeyDown}
-                  placeholder="Şehir, ülke veya havalimanı kodu ara..."
+                  placeholder={t("dd.search")}
                   className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400 dark:placeholder:text-white/40"
                 />
                 {query && (
                   <button
                     type="button"
-                    aria-label="Aramayı temizle"
+                    aria-label={t("dd.clear")}
                     onClick={() => {
                       setQuery("");
                       inputRef.current?.focus();
@@ -220,9 +252,9 @@ export default function CitySelectDropdown({
                       {a.flag}
                     </span>
                     <span className="min-w-0 flex-1 leading-tight">
-                      <span className="block truncate text-sm font-semibold">{a.city}</span>
+                      <span className="block truncate text-sm font-semibold">{cityName(a, t.locale)}</span>
                       <span className="block truncate text-[11px] text-slate-500 dark:text-white/55">
-                        {disabled ? disabledHint : (getSubtitle?.(a) ?? a.country)}
+                        {disabled ? (disabledHint ?? t("dd.sameAsOrigin")) : (getSubtitle?.(a) ?? countryName(a, t.locale))}
                       </span>
                     </span>
                     <span className="shrink-0 rounded-lg border border-slate-200 bg-white/70 px-2 py-0.5 font-mono text-[11px] font-semibold tracking-wide text-slate-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] backdrop-blur-xl dark:border-white/15 dark:bg-white/10 dark:text-white/80 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]">
@@ -238,7 +270,12 @@ export default function CitySelectDropdown({
               })}
               {visible.length === 0 && (
                 <li className="px-3 py-6 text-center text-sm text-slate-500 dark:text-white/50">
-                  &ldquo;{query}&rdquo; için sonuç bulunamadı.
+                  {t("dd.noResults", { q: query })}
+                </li>
+              )}
+              {total > visible.length && (
+                <li aria-hidden className="px-3 py-2 text-center text-[11px] text-slate-400 dark:text-white/40">
+                  {t("dd.more", { n: total - visible.length })}
                 </li>
               )}
             </ul>

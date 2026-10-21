@@ -23,7 +23,15 @@ export interface Airport {
   flag: string;
   /** Yerel saat farkı (UTC'ye göre, saat) */
   utcOffset: number;
+  /** ISO 3166 ülke kodu ("TR") — dünya verisinden gelir */
+  countryCode?: string;
+  /** Şehir merkezi (mekan keşfi / otel önerisi); yoksa `coordinates` */
+  cityCenter?: LngLat;
+  /** 1 = küresel hub, 2 = büyük, 3 = bölgesel (direkt uçuş olasılığı) */
+  tier?: AirportTier;
 }
+
+export type AirportTier = 1 | 2 | 3;
 
 export type FlightType = "direct" | "layover";
 
@@ -54,18 +62,18 @@ export interface Flight {
   cabinBaggageKg: number;
   checkedBaggageKg: number;
   tags: string[];
-  /** Anlık kampanya yakalandıysa dolu; `price` zaten indirimli fiyattır */
+  /** Yalnız canlı veriyle doğrulanmış fırsatta dolu (piyasa ortalamasının ≥%15 altı); `price` fırsat fiyatıdır */
   campaign?: FlightCampaign;
 }
 
-/** "🔥 Fiyat Düştü": rota + tarih + gün tohumuyla bir uçuşta yakalanan indirim */
+/** "🔥 Doğrulanmış Fırsat": canlı en düşük fiyat, rota + ay piyasa ortalamasının en az %15 altında */
 export interface FlightCampaign {
-  /** Kişi başı indirimsiz gidiş-dönüş fiyatı (USD) */
+  /** Kişi başı piyasa ortalaması (USD, gidiş-dönüş) */
   originalPrice: number;
-  /** Yüzde indirim (12–22) */
+  /** Ortalamaya göre yüzde fark (≥15) */
   discountPercent: number;
-  /** Bu fiyattan kalan koltuk (2–7) */
-  seatsLeft: number;
+  /** Fırsatı doğrulayan canlı kaynak */
+  verifiedBy: Exclude<FlightPriceSource, "simulation">;
 }
 
 /** Uçuş fiyatlarının kaynağı: gerçek API ya da piyasa bandı simülasyonu */

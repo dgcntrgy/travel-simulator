@@ -10,8 +10,9 @@ function json(body: unknown, status = 200, cache = "no-store") {
 
 /**
  * GET /api/flights?origin=SAW&destination=HND&date=2026-11-20&passengers=2
- * → { flights, source, liveMinPrice, fetchedAt, passengers, campaigns: [{ id, label }] }
- * Fiyatlar kişi başı gidiş-dönüş USD; kampanya etiketi yolcu toplamıyla yazılır.
+ * → { flights, source, liveMinPrice, marketAverage, fetchedAt, passengers, campaigns: [{ id, label }] }
+ * Fiyatlar kişi başı gidiş-dönüş USD. `campaigns` yalnızca canlı veriyle doğrulanmış fırsatları içerir
+ * (piyasa ortalamasının ≥%15 altı); simülasyon kaynağında her zaman boştur.
  */
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
@@ -31,8 +32,8 @@ export async function GET(request: NextRequest) {
     .map((f) => ({
       id: f.id,
       label:
-        `Normalde ${usd(f.campaign!.originalPrice * passengers)} ➔ Kampanyalı ${usd(f.price * passengers)}` +
-        ` • %${f.campaign!.discountPercent} İndirim • Son ${f.campaign!.seatsLeft} Koltuk`,
+        `Piyasa ort. ${usd(f.campaign!.originalPrice * passengers)} ➔ ${usd(f.price * passengers)}` +
+        ` • %${f.campaign!.discountPercent} altında • Doğrulayan: ${f.campaign!.verifiedBy}`,
     }));
 
   return json({ ...result, passengers, campaigns }, 200, "public, s-maxage=3600, stale-while-revalidate=600");

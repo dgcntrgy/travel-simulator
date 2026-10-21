@@ -1,6 +1,8 @@
 import type { Airport } from "@/types/trip";
+import { WORLD_AIRPORTS } from "./worldAirports";
 
-export const AIRPORTS = {
+/** Elle düzenlenmiş kayıtlar (kürasyonlu şehir adı / koordinat); dünya verisinin üzerine yazılır */
+const CURATED_AIRPORTS = {
   // Türkiye çıkışları
   IST: {
     code: "IST",
@@ -426,7 +428,14 @@ export const AIRPORTS = {
   },
 } satisfies Record<string, Airport>;
 
-export type AirportCode = keyof typeof AIRPORTS;
+export type AirportCode = keyof typeof CURATED_AIRPORTS;
+
+const WORLD_BY_CODE = new Map(WORLD_AIRPORTS.map((a) => [a.code, a]));
+
+/** Kürasyonlu kayıtlar + dünya verisinin ISO ülke kodu, şehir merkezi ve kademesi */
+export const AIRPORTS = Object.fromEntries(
+  Object.entries(CURATED_AIRPORTS).map(([code, a]) => [code, { ...WORLD_BY_CODE.get(code), ...a } as Airport]),
+) as Record<AirportCode, Airport>;
 
 /** "Nereden kalkıyorsun?" listesindeki popüler kalkış noktaları, bölgelere göre */
 export const ORIGIN_GROUPS = [
@@ -470,3 +479,20 @@ export const isTurkishAirport = (a: Airport) => a.country === "Türkiye";
 export const FEATURED_DESTINATIONS: Airport[] = FEATURED_CODES.map((c) => AIRPORTS[c]);
 export const DESTINATIONS: Airport[] = DESTINATION_CODES.map((c) => AIRPORTS[c]);
 
+const POPULAR_CODES = new Set(SEARCHABLE_ORIGINS.map((a) => a.code));
+
+/**
+ * Dünyadaki tüm havalimanları (~390): önce popüler kalkış/varış noktaları, sonra kademe (hub → bölgesel)
+ * ve şehir adına göre. Arama listeleri (`CitySelectDropdown`) ve en yakın havalimanı hesabı bunu kullanır.
+ */
+export const ALL_AIRPORTS: Airport[] = [
+  ...SEARCHABLE_ORIGINS,
+  ...WORLD_AIRPORTS.filter((a) => !POPULAR_CODES.has(a.code))
+    .map((a) => (a.code in AIRPORTS ? AIRPORTS[a.code as AirportCode] : a))
+    .sort((a, b) => (a.tier ?? 2) - (b.tier ?? 2) || a.city.localeCompare(b.city, "tr")),
+];
+
+const INDEX = new Map(ALL_AIRPORTS.map((a) => [a.code, a]));
+
+/** IATA kodundan havalimanı (büyük/küçük harf duyarsız); bilinmiyorsa undefined */
+export const findAirport = (code: string): Airport | undefined => INDEX.get(code.toUpperCase());

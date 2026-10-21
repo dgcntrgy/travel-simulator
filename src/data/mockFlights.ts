@@ -1,7 +1,7 @@
 import { distance } from "@turf/turf";
 import type { Airport, Flight } from "@/types/trip";
-import { generateFlightTemplates, type FlightTemplate } from "@/lib/globalDiscovery";
-import { AIRPORTS, isTurkishAirport, type FeaturedCode } from "./airports";
+import { generateFlightTemplates, type FlightTemplate } from "@/lib/globalRouteEngine";
+import { AIRPORTS, findAirport, isTurkishAirport, type FeaturedCode } from "./airports";
 
 /**
  * Uçuş simülasyon motoru.
@@ -313,7 +313,7 @@ export function getFlights(origin: Airport, destination: Airport, departureDate:
   const region = isTurkishAirport(origin) ? COUNTRY_REGION[destination.country] : undefined;
 
   return templates.map((t) => {
-    const hub = t.hub ? AIRPORTS[t.hub] : undefined;
+    const hub = t.hub ? findAirport(t.hub) : undefined;
     const layoverMinutes = hub ? (t.layoverMinutes ?? 120) : 0;
 
     const flyingMinutes = hub

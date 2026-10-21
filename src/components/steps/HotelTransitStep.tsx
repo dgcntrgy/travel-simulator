@@ -35,6 +35,7 @@ import {
   type HotelEvaluation,
   type TripPlan,
 } from "@/lib/routeOptimizer";
+import { useT } from "@/lib/useI18n";
 import { useTripStore } from "@/store/useTripStore";
 import { cn } from "@/lib/cn";
 import type { Hotel, HotelTier, IntercityTransfer, TransitMode, TripRoute } from "@/types/trip";
@@ -366,6 +367,7 @@ function TransitBreakdown({ plan, city, evaluation }: { plan: TripPlan; city: Ci
 }
 
 function HotelActionBar({ plan }: { plan: TripPlan }) {
+  const t = useT();
   const prevStep = useTripStore((s) => s.prevStep);
   const nextStep = useTripStore((s) => s.nextStep);
   const recommendedHotels = useTripStore((s) => s.recommendedHotels);
@@ -380,12 +382,11 @@ function HotelActionBar({ plan }: { plan: TripPlan }) {
         className="flex shrink-0 items-center gap-1.5 rounded-xl glass-secondary px-3 py-3 text-sm text-ink/70 hover:text-ink"
       >
         <ArrowLeft size={15} />
-        <span className="hidden sm:inline">Geri Dön (Mekanlar)</span>
+        <span className="hidden sm:inline">{t("hotel.back")}</span>
       </button>
 
       <p className="min-w-0 flex-1 truncate px-1 text-xs text-ink/60 sm:text-sm">
-        <b className="text-ink">{plan.totalDays} gün</b> · {plan.cities.length} şehir · konaklama{" "}
-        <span className="font-mono text-ink">{usd(hotelTotal)}</span>
+        {t("hotel.summary", { d: plan.totalDays, c: plan.cities.length, price: usd(hotelTotal) })}
       </p>
 
       <button
@@ -399,9 +400,9 @@ function HotelActionBar({ plan }: { plan: TripPlan }) {
             : "cursor-not-allowed bg-ink/[0.07] text-ink/35",
         )}
       >
-        <span className="hidden xl:inline">Planı Tamamla & Kişisel Tur Rehberimi Oluştur</span>
-        <span className="hidden md:inline xl:hidden">Planı Tamamla (Adım 4)</span>
-        <span className="md:hidden">Devam</span>
+        <span className="hidden xl:inline">{t("hotel.next")}</span>
+        <span className="hidden md:inline xl:hidden">{t("hotel.nextShort")}</span>
+        <span className="md:hidden">{t("nav.continue")}</span>
         <ArrowRight size={16} />
       </button>
     </div>

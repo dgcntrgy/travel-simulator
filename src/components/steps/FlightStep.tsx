@@ -22,11 +22,22 @@ import {
   Users,
 } from "lucide-react";
 import WorldMap from "@/components/map/WorldMap";
-import { DESTINATIONS, SEARCHABLE_ORIGINS } from "@/data/airports";
-import { formatDuration, getFlights } from "@/data/mockFlights";
-import { applyCampaigns, verificationLinks } from "@/lib/flightCampaigns";
+import { ALL_AIRPORTS } from "@/data/airports";
+import { getFlights } from "@/data/mockFlights";
+import { verificationLinks } from "@/lib/flightCampaigns";
 import CitySelectDropdown from "@/components/ui/CitySelectDropdown";
 import { getDestinationProfile, matchesDestination } from "@/lib/globalDiscovery";
+import { routeInfo } from "@/lib/globalRouteEngine";
+import {
+  cityName,
+  countryName,
+  formatDurationLocale,
+  formatTimeDiff,
+  translateTag,
+  type Locale,
+  type TranslationKey,
+} from "@/lib/i18n";
+import { useT } from "@/lib/useI18n";
 import { useTripStore } from "@/store/useTripStore";
 import { cn } from "@/lib/cn";
 import type { Airport, Flight, FlightPriceSource, FlightType } from "@/types/trip";
@@ -34,10 +45,10 @@ import { riseIn, SLIDE_FROM_LEFT, SLIDE_FROM_RIGHT, SPRING_IN, STEP_TRANSITION }
 
 type Filter = "all" | FlightType;
 
-const FILTERS: { id: Filter; label: string }[] = [
-  { id: "all", label: "Tümü" },
-  { id: "direct", label: "Direkt" },
-  { id: "layover", label: "Aktarmalı" },
+const FILTERS: { id: Filter; label: TranslationKey }[] = [
+  { id: "all", label: "common.all" },
+  { id: "direct", label: "flight.filterDirect" },
+  { id: "layover", label: "flight.filterLayover" },
 ];
 
 /** Direkt = camgöbeği, aktarmalı = amber; iki temada okunur tonlar */
@@ -74,10 +85,12 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 /** Uçuş süresi barı: uçak ikonu ortada, aktarma noktası bar üzerinde işaretli */
 function DurationBar({ flight, selected }: { flight: Flight; selected: boolean }) {
+  const t = useT();
+  const dur = (m: number) => formatDurationLocale(t.locale, m);
   return (
     <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5 px-1">
       <span className="flex items-center gap-1 font-mono text-[10px] text-ink/50">
-        <Clock size={10} /> {formatDuration(flight.totalDurationMinutes)}
+        <Clock size={10} /> {dur(flight.totalDurationMinutes)}
       </span>
       <span className="relative flex h-5 w-full items-center">
         <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500" />
@@ -100,8 +113,8 @@ function DurationBar({ flight, selected }: { flight: Flight; selected: boolean }
         )}
       >
         {flight.layover
-          ? `${flight.layover.airport.code} · ${formatDuration(flight.layover.durationMinutes)} aktarma`
-          : "Direkt"}
+          ? t("flight.layover", { code: flight.layover.airport.code, dur: dur(flight.layover.durationMinutes) })
+          : t("flight.direct")}
       </span>
     </div>
   );
@@ -163,6 +176,7 @@ function FlightCard({
   index: number;
   departureDate: string;
 }) {
+  const t = useT();
   const campaign = flight.campaign;
   return (
     <motion.div layout {...riseIn(index)} exit={{ opacity: 0, y: -8, transition: { duration: 0.2 } }}>
@@ -198,18 +212,18 @@ function FlightCard({
               <div className="min-w-0 leading-tight">
                 <p className="truncate text-sm font-semibold text-ink">{flight.airline}</p>
                 <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink/45">
-                  Biniş Kartı · {flight.flightNumber}
+                  {t("flight.boardingPass")} · {flight.flightNumber}
                 </p>
               </div>
             </div>
             {campaign ? (
               <span className="campaign-badge flex shrink-0 items-center gap-1 rounded-full bg-gradient-to-r from-rose-500 to-orange-500 px-2 py-0.5 text-[10px] font-bold text-white">
-                <Flame size={11} /> Anlık Kampanya (-%{campaign.discountPercent})
+                <Flame size={11} /> {t("flight.deal", { n: campaign.discountPercent })}
               </span>
             ) : (
               cheapest && (
                 <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-200">
-                  En uygun
+                  {t("flight.cheapest")}
                 </span>
               )
             )}
@@ -218,13 +232,13 @@ function FlightCard({
           <div className="mt-3 flex items-center gap-2">
             <div className="leading-tight">
               <p className="font-mono text-2xl font-black tracking-tight text-ink sm:text-3xl">{flight.origin.code}</p>
-              <p className="max-w-[6.5rem] truncate text-[11px] text-ink/50">{flight.origin.city}</p>
+              <p className="max-w-[6.5rem] truncate text-[11px] text-ink/50">{cityName(flight.origin, t.locale)}</p>
               <p className="mt-0.5 font-mono text-sm font-semibold text-ink/80">{flight.departureTime}</p>
             </div>
             <DurationBar flight={flight} selected={selected} />
             <div className="text-right leading-tight">
               <p className="font-mono text-2xl font-black tracking-tight text-ink sm:text-3xl">{flight.destination.code}</p>
-              <p className="ml-auto max-w-[6.5rem] truncate text-[11px] text-ink/50">{flight.destination.city}</p>
+              <p className="ml-auto max-w-[6.5rem] truncate text-[11px] text-ink/50">{cityName(flight.destination, t.locale)}</p>
               <p className="mt-0.5 font-mono text-sm font-semibold text-ink/80">
                 {flight.arrivalTime}
                 {flight.arrivalDayOffset > 0 && (
@@ -236,10 +250,10 @@ function FlightCard({
 
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
             {flight.tags
-              .filter((t) => t !== "En uygun" && t !== "Kesintisiz")
-              .map((t) => (
-                <span key={t} className="rounded-full bg-ink/[0.06] px-2 py-0.5 text-[10px] text-ink/60">
-                  {t}
+              .filter((tag) => tag !== "En uygun" && tag !== "Kesintisiz")
+              .map((tag) => (
+                <span key={tag} className="rounded-full bg-ink/[0.06] px-2 py-0.5 text-[10px] text-ink/60">
+                  {translateTag(t.locale, tag)}
                 </span>
               ))}
             <span className="ml-auto flex items-center gap-1 text-[10px] text-ink/45">
@@ -249,9 +263,12 @@ function FlightCard({
 
           {campaign && (
             <p className="mt-2.5 rounded-lg border border-orange-500/30 bg-orange-500/10 px-2.5 py-1.5 text-[11px] font-medium text-orange-800 dark:text-orange-200">
-              🔥 Fiyat Düştü · Normalde <s className="opacity-70">{usd(campaign.originalPrice * passengers)}</s> ➔
-              Kampanyalı <b>{usd(flight.price * passengers)}</b> • %{campaign.discountPercent} İndirim • Son{" "}
-              {campaign.seatsLeft} Koltuk
+              {t("flight.dealStrip", {
+                avg: usd(campaign.originalPrice * passengers),
+                price: usd(flight.price * passengers),
+                n: campaign.discountPercent,
+                source: SOURCE_NAME[campaign.verifiedBy],
+              })}
             </p>
           )}
         </div>
@@ -265,10 +282,10 @@ function FlightCard({
         >
           {selected ? (
             <span className="flex items-center gap-1 rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-bold text-amber-950">
-              <Check size={10} strokeWidth={3} /> Seçildi
+              <Check size={10} strokeWidth={3} /> {t("flight.selected")}
             </span>
           ) : (
-            <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-ink/40">Ekonomi</span>
+            <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-ink/40">{t("flight.economy")}</span>
           )}
           <div className="leading-tight">
             {campaign && (
@@ -286,8 +303,8 @@ function FlightCard({
             </p>
             <p className="text-[9px] text-ink/45">
               {passengers > 1
-                ? `${passengers} yolcu toplamı • Kişi başı $${flight.price.toLocaleString("en-US")}`
-                : "1 yetişkin • Gidiş-Dönüş"}
+                ? t("flight.paxTotal", { n: passengers, price: usd(flight.price) })
+                : t("flight.onePax")}
             </p>
           </div>
           <Barcode seed={flight.id} />
@@ -311,15 +328,24 @@ function FlightCard({
 
 const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
 
+const SOURCE_NAME: Record<Exclude<FlightPriceSource, "simulation">, string> = {
+  travelpayouts: "Travelpayouts",
+  amadeus: "Amadeus",
+};
+
+/** Google Flights arayüz dili (hl) */
+const GOOGLE_HL: Record<Locale, string> = { tr: "tr", en: "en", de: "de", fr: "fr", ja: "ja", zh: "zh-CN" };
+
 /** Seçili kartın altında açılan bar: rota/tarih/yolcu gömülü Google Flights & Skyscanner aramaları */
 function VerifyBar({ flight, passengers, departureDate }: { flight: Flight; passengers: number; departureDate: string }) {
-  const links = verificationLinks(flight.origin.code, flight.destination.code, departureDate, passengers);
+  const t = useT();
+  const links = verificationLinks(flight.origin.code, flight.destination.code, departureDate, passengers, GOOGLE_HL[t.locale]);
   const linkClass =
     "flex items-center gap-1.5 rounded-lg glass-secondary px-3 py-1.5 text-xs font-semibold text-ink/80 hover:text-ink";
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-blue-500/25 bg-blue-500/[0.06] px-3 py-2.5">
       <p className="flex min-w-0 flex-1 items-center gap-1.5 text-xs font-semibold text-blue-700 dark:text-blue-200">
-        <Globe size={14} className="shrink-0" /> Canlı Fiyatı & Kampanyayı Doğrula
+        <Globe size={14} className="shrink-0" /> {t("flight.verify")}
       </p>
       <a href={links.google} target="_blank" rel="noopener noreferrer" className={linkClass}>
         Google Flights <ExternalLink size={12} />
@@ -331,14 +357,15 @@ function VerifyBar({ flight, passengers, departureDate }: { flight: Flight; pass
   );
 }
 
-const SOURCE_LABEL: Record<FlightPriceSource, string> = {
-  travelpayouts: "Canlı fiyat · Travelpayouts",
-  amadeus: "Canlı fiyat · Amadeus",
-  simulation: "Piyasa bandı tahmini",
+const SOURCE_LABEL: Record<FlightPriceSource, TranslationKey> = {
+  travelpayouts: "flight.srcTravelpayouts",
+  amadeus: "flight.srcAmadeus",
+  simulation: "flight.srcSimulation",
 };
 
 /** Alt CTA: seçili uçuş özeti + "Adım 2'ye Geç" */
 function FlightActionBar() {
+  const t = useT();
   const selectedFlight = useTripStore((s) => s.selectedFlight);
   const prevStep = useTripStore((s) => s.prevStep);
   const nextStep = useTripStore((s) => s.nextStep);
@@ -349,7 +376,7 @@ function FlightActionBar() {
       <button
         type="button"
         onClick={prevStep}
-        aria-label="Ana sayfaya dön"
+        aria-label={t("nav.home")}
         className="grid h-11 w-11 shrink-0 place-items-center rounded-xl glass-secondary text-ink/70 hover:text-ink"
       >
         <ArrowLeft size={16} />
@@ -370,9 +397,11 @@ function FlightActionBar() {
                 <b>{selectedFlight.airline}</b>
                 <span className="text-ink/50">
                   {" · "}
-                  {selectedFlight.type === "direct" ? "Direkt" : `${selectedFlight.layover?.airport.code} aktarmalı`}
+                  {selectedFlight.type === "direct"
+                    ? t("flight.direct")
+                    : t("flight.via", { code: selectedFlight.layover?.airport.code ?? "" })}
                   {" · "}
-                  {formatDuration(selectedFlight.totalDurationMinutes)}
+                  {formatDurationLocale(t.locale, selectedFlight.totalDurationMinutes)}
                 </span>
               </span>
             </motion.div>
@@ -384,7 +413,7 @@ function FlightActionBar() {
               exit={{ opacity: 0 }}
               className="truncate text-sm text-ink/50"
             >
-              Devam etmek için bir uçuş seç.
+              {t("flight.pickOne")}
             </motion.p>
           )}
         </AnimatePresence>
@@ -401,8 +430,8 @@ function FlightActionBar() {
             : "cursor-not-allowed bg-ink/[0.07] text-ink/35",
         )}
       >
-        <span className="hidden sm:inline">Gezilecek Yerleri Keşfet</span>
-        <span className="sm:hidden">Devam</span>
+        <span className="hidden sm:inline">{t("flight.next")}</span>
+        <span className="sm:hidden">{t("nav.continue")}</span>
         <ArrowRight size={16} />
       </button>
     </div>
@@ -412,9 +441,14 @@ function FlightActionBar() {
 /** Kalkış/varış aynı şehirde mi? (IST↔SAW, LHR↔LHR) — bu çiftte uçuş yok */
 const sameCity = (a: Airport | null, b: Airport) => !!a && (a.code === b.code || a.city === b.city);
 
-/** Varış satırlarının alt metni: ülke · öne çıkan şehirler */
-const destinationSubtitle = (d: Airport) =>
-  [d.country, ...getDestinationProfile(d).cities.map((c) => c.name).filter((n) => n !== d.city)].join(" · ");
+/** Varış satırlarının alt metni: ülke · (kürasyonlu profilde) öne çıkan şehirler */
+const destinationSubtitle = (d: Airport, locale: Locale) =>
+  [
+    countryName(d, locale),
+    ...getDestinationProfile(d)
+      .cities.map((c) => c.name)
+      .filter((n) => n !== d.city),
+  ].join(" · ");
 
 /** Numaralı seçim bölümü başlığı ("1 · Nereden kalkıyorsun?") */
 function PickerHeading({ index, icon: Icon, title, hint, tone }: {
@@ -424,6 +458,7 @@ function PickerHeading({ index, icon: Icon, title, hint, tone }: {
   hint: string;
   tone: "violet" | "cyan";
 }) {
+  const t = useT();
   return (
     <div className="mb-3 flex items-center gap-3">
       <span
@@ -437,7 +472,7 @@ function PickerHeading({ index, icon: Icon, title, hint, tone }: {
         <Icon size={17} />
       </span>
       <div className="leading-tight">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink/45">Adım 1.{index}</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink/45">{t("flight.sub", { n: index })}</p>
         <h2 className="text-lg font-bold text-ink">{title}</h2>
       </div>
       <p className="ml-auto hidden text-right text-[11px] text-ink/45 sm:block">{hint}</p>
@@ -447,6 +482,7 @@ function PickerHeading({ index, icon: Icon, title, hint, tone }: {
 
 /** Adım 1: Sol %45 kalkış + varış + uçuş seçimi, sağ %55 düz 2D dünya haritası */
 export default function FlightStep() {
+  const t = useT();
   const origin = useTripStore((s) => s.origin);
   const destination = useTripStore((s) => s.destination);
   const departureDate = useTripStore((s) => s.departureDate);
@@ -461,7 +497,12 @@ export default function FlightStep() {
   const [filter, setFilter] = useState<Filter>("all");
   // Elle yazılan tarih: yıl yazılırken ("0002-…") ara değerler taslakta kalır, tam yılda sabitlenip kaydedilir
   const [dateDraft, setDateDraft] = useState(departureDate);
-  useEffect(() => setDateDraft(departureDate), [departureDate]);
+  // Store tarihi dışarıdan değişince taslağı render sırasında eşitle (effect içinde setState yerine)
+  const [draftSource, setDraftSource] = useState(departureDate);
+  if (draftSource !== departureDate) {
+    setDraftSource(departureDate);
+    setDateDraft(departureDate);
+  }
 
   // Kalıcı/eski bir tarih aralık dışındaysa düzelt
   useEffect(() => {
@@ -475,12 +516,14 @@ export default function FlightStep() {
     if (clamped !== departureDate) setDepartureDate(clamped);
   };
 
-  // Anında yerel simülasyon (aynı kampanya algoritması), ardından /api/flights canlı sonucu üzerine yazar
+  // Anında yerel simülasyon (kampanya rozeti YOK), ardından /api/flights canlı sonucu üzerine yazar;
+  // rozet yalnızca canlı veride piyasa ortalamasının ≥%15 altında doğrulanmış fırsat varsa gelir
   const routeKey = origin && destination ? `${origin.code}-${destination.code}-${departureDate}` : "";
   const localFlights = useMemo(
-    () => (origin && destination ? applyCampaigns(getFlights(origin, destination, departureDate), departureDate) : []),
+    () => (origin && destination ? getFlights(origin, destination, departureDate) : []),
     [origin, destination, departureDate],
   );
+  const info = useMemo(() => (origin && destination ? routeInfo(origin, destination) : null), [origin, destination]);
   const [live, setLive] = useState<{ key: string; flights: Flight[]; source: FlightPriceSource } | null>(null);
   useEffect(() => {
     if (!origin || !destination) return;
@@ -520,8 +563,8 @@ export default function FlightStep() {
   const cheapestId = flights[0]?.id;
   const directCount = flights.filter((f) => f.type === "direct").length;
 
-  // Ters yön sadece kalkış noktası da bir hedef ülkeyse anlamlı (örn. Londra ⇄ Paris)
-  const canSwap = !!origin && !!destination && DESTINATIONS.some((d) => d.code === origin.code);
+  // Dünyadaki her havalimanı hem kalkış hem varış olabilir
+  const canSwap = !!origin && !!destination;
   const swap = () => {
     if (!origin || !destination || !canSwap) return;
     const from = origin;
@@ -543,13 +586,10 @@ export default function FlightStep() {
           <div className="mx-auto max-w-2xl space-y-7 px-4 py-6 md:px-8 md:py-8">
             <header>
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600 dark:text-blue-300">
-                Adım 1 · Rota & Uçuş
+                {t("flight.eyebrow")}
               </p>
-              <h1 className="mt-1 text-2xl font-bold text-ink md:text-3xl">Yolculuğun nereden nereye?</h1>
-              <p className="mt-1.5 text-sm text-ink/60">
-                Önce kalkış noktanı, sonra hedef ülkeni seç; direkt ve aktarmalı uçuşlar sağdaki haritada kavisli
-                rotalar olarak çizilir.
-              </p>
+              <h1 className="mt-1 text-2xl font-bold text-ink md:text-3xl">{t("flight.title")}</h1>
+              <p className="mt-1.5 text-sm text-ink/60">{t("flight.text")}</p>
             </header>
 
             {/* 1.1 Kalkış */}
@@ -557,19 +597,19 @@ export default function FlightStep() {
               <PickerHeading
                 index={1}
                 icon={PlaneTakeoff}
-                title="Nereden kalkıyorsun?"
-                hint="Türkiye · Avrupa · Amerika · Asya"
+                title={t("flight.fromTitle")}
+                hint={t("flight.fromHint", { n: ALL_AIRPORTS.length })}
                 tone="violet"
               />
               <div className="card rounded-2xl p-1">
                 <CitySelectDropdown
-                  label="Kalkış noktası"
+                  label={t("flight.fromLabel")}
                   icon={PlaneTakeoff}
                   value={origin}
-                  options={SEARCHABLE_ORIGINS}
+                  options={ALL_AIRPORTS}
                   isDisabled={(a) => sameCity(destination, a)}
-                  disabledHint="Varış noktanla aynı şehir"
-                  getSubtitle={(a) => `${a.airportName} · ${a.country}`}
+                  disabledHint={t("dd.sameAsDestination")}
+                  getSubtitle={(a) => `${a.airportName} · ${countryName(a, t.locale)}`}
                   onChange={setOrigin}
                 />
               </div>
@@ -582,8 +622,8 @@ export default function FlightStep() {
                   <PickerHeading
                     index={2}
                     icon={PlaneLanding}
-                    title="Nereye gidiyorsun?"
-                    hint={`${DESTINATIONS.length} ülke · haritadan da seçebilirsin`}
+                    title={t("flight.toTitle")}
+                    hint={t("flight.toHint", { n: ALL_AIRPORTS.length })}
                     tone="cyan"
                   />
                 </div>
@@ -591,8 +631,8 @@ export default function FlightStep() {
                   <button
                     type="button"
                     onClick={swap}
-                    title="Kalkış ve varışı değiştir"
-                    aria-label="Kalkış ve varışı değiştir"
+                    title={t("flight.swap")}
+                    aria-label={t("flight.swap")}
                     className="mt-1 grid h-9 w-9 shrink-0 place-items-center rounded-xl glass-secondary text-ink/60 hover:text-ink"
                   >
                     <ArrowRightLeft size={15} />
@@ -601,12 +641,13 @@ export default function FlightStep() {
               </div>
               <div className="card rounded-2xl p-1">
                 <CitySelectDropdown
-                  label="Varış noktası"
+                  label={t("flight.toLabel")}
                   icon={PlaneLanding}
                   value={destination}
-                  options={DESTINATIONS}
+                  options={ALL_AIRPORTS}
                   isDisabled={(a) => sameCity(origin, a)}
-                  getSubtitle={destinationSubtitle}
+                  disabledHint={t("dd.sameAsOrigin")}
+                  getSubtitle={(a) => destinationSubtitle(a, t.locale)}
                   matches={matchesDestination}
                   onChange={setDestination}
                 />
@@ -616,7 +657,7 @@ export default function FlightStep() {
             {/* Tarih, yolcu */}
             <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
               <div>
-                <SectionLabel>Gidiş Tarihi</SectionLabel>
+                <SectionLabel>{t("flight.date")}</SectionLabel>
                 <label className={inputBox}>
                   <CalendarDays size={16} className="shrink-0 text-blue-600 dark:text-blue-300" />
                   <input
@@ -635,11 +676,11 @@ export default function FlightStep() {
                 </label>
               </div>
               <div>
-                <SectionLabel>Yolcu</SectionLabel>
+                <SectionLabel>{t("flight.pax")}</SectionLabel>
                 <div className="flex items-center gap-1 rounded-xl border border-ink/10 bg-surface px-1.5 py-1.5">
                   <button
                     type="button"
-                    aria-label="Yolcu azalt"
+                    aria-label={t("flight.paxDec")}
                     onClick={() => setTravelers(travelers - 1)}
                     className="grid h-8 w-8 place-items-center rounded-lg text-ink/70 hover:bg-ink/[0.07]"
                   >
@@ -651,7 +692,7 @@ export default function FlightStep() {
                   </span>
                   <button
                     type="button"
-                    aria-label="Yolcu artır"
+                    aria-label={t("flight.paxInc")}
                     onClick={() => setTravelers(travelers + 1)}
                     className="grid h-8 w-8 place-items-center rounded-lg text-ink/70 hover:bg-ink/[0.07]"
                   >
@@ -668,7 +709,11 @@ export default function FlightStep() {
                   <p className="text-sm font-semibold text-ink">
                     {origin.code} → {destination.code}
                     <span className="ml-2 font-normal text-ink/50">
-                      {flights.length} uçuş · {directCount} direkt · {flights.length - directCount} aktarmalı
+                      {t("flight.count", {
+                        total: flights.length,
+                        direct: directCount,
+                        layover: flights.length - directCount,
+                      })}
                     </span>
                     <span
                       className={cn(
@@ -678,8 +723,17 @@ export default function FlightStep() {
                           : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-200",
                       )}
                     >
-                      {SOURCE_LABEL[priceSource]}
+                      {t(SOURCE_LABEL[priceSource])}
                     </span>
+                    {info && (
+                      <span className="mt-1 block text-[11px] font-normal text-ink/45">
+                        {t("flight.routeInfo", {
+                          km: info.distanceKm.toLocaleString("en-US"),
+                          dur: formatDurationLocale(t.locale, info.directMinutes),
+                          tz: formatTimeDiff(t.locale, info.timeDiffHours),
+                        })}
+                      </span>
+                    )}
                   </p>
                   <div className="flex rounded-xl bg-ink/[0.06] p-1">
                     {FILTERS.map((f) => (
@@ -692,7 +746,7 @@ export default function FlightStep() {
                           filter === f.id ? "bg-surface text-ink shadow-sm" : "text-ink/55 hover:text-ink",
                         )}
                       >
-                        {f.label}
+                        {t(f.label)}
                       </button>
                     ))}
                   </div>
@@ -717,17 +771,17 @@ export default function FlightStep() {
                 {visible.length === 0 && (
                   <p className="rounded-2xl border border-dashed border-ink/15 p-6 text-center text-sm text-ink/50">
                     {flights.length === 0
-                      ? "Bu iki nokta arasında uçuş bulunamadı — farklı bir kalkış veya hedef dene."
-                      : `Bu rotada ${filter === "direct" ? "direkt" : "mantıklı aktarmalı"} uçuş yok — diğer filtreye göz at.`}
+                      ? t("flight.noFlights")
+                      : filter === "direct"
+                        ? t("flight.noDirect")
+                        : t("flight.noLayover")}
                   </p>
                 )}
               </div>
             ) : (
               <div className="flex items-center gap-3 rounded-2xl border border-dashed border-ink/15 p-5 text-sm text-ink/55">
                 <MapPin size={18} className="shrink-0 text-blue-600 dark:text-blue-300" />
-                {!origin
-                  ? "Uçuşları görmek için önce kalkış noktanı seç."
-                  : "Şimdi hedef ülkeni seç — direkt ve aktarmalı uçuşlar burada listelenecek."}
+                {!origin ? t("flight.needOrigin") : t("flight.needDestination")}
               </div>
             )}
           </div>

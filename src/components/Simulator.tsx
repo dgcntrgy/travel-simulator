@@ -5,6 +5,7 @@ import { AnimatePresence } from "framer-motion";
 import TopBar from "@/components/hud/TopBar";
 import AdminPanel from "@/components/modals/AdminPanel";
 import AuthModal from "@/components/modals/AuthModal";
+import CookieLocationBanner from "@/components/modals/CookieLocationBanner";
 import ProUpgradeModal from "@/components/modals/ProUpgradeModal";
 import FinalGuideStep from "@/components/steps/FinalGuideStep";
 import FlightStep from "@/components/steps/FlightStep";
@@ -12,6 +13,7 @@ import HotelTransitStep from "@/components/steps/HotelTransitStep";
 import LandingStep from "@/components/steps/LandingStep";
 import PlaceDiscoveryStep from "@/components/steps/PlaceDiscoveryStep";
 import { useAuthSync } from "@/lib/authClient";
+import { useGeoBootstrap } from "@/lib/geoClient";
 import { useTripStore } from "@/store/useTripStore";
 
 /** Çok silik mimari nokta deseni; homojen mat zeminin üstünde, kenarlara doğru söner */
@@ -38,6 +40,7 @@ function CornerSpotlights() {
 export default function Simulator() {
   const currentStep = useTripStore((s) => s.currentStep);
   const theme = useTripStore((s) => s.theme);
+  const locale = useTripStore((s) => s.locale);
   const origin = useTripStore((s) => s.origin);
   const destination = useTripStore((s) => s.destination);
   const hasFlight = useTripStore((s) => s.selectedFlight !== null);
@@ -50,6 +53,12 @@ export default function Simulator() {
 
   // Oturumu geri yükle + son rota / Pro durumunu kullanıcı kaydına yaz
   useAuthSync();
+  // IP ülkesine göre dil (kayıtlı tercih yoksa) + onaylıysa kayıtlı kalkış havalimanı
+  useGeoBootstrap();
+
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
 
   // Tailwind `dark:` varyantı ve CSS token'ları <html class="dark"> üzerinden çalışır
   useEffect(() => {
@@ -98,6 +107,7 @@ export default function Simulator() {
       <ProUpgradeModal />
       <AuthModal />
       <AdminPanel />
+      <CookieLocationBanner />
     </div>
   );
 }

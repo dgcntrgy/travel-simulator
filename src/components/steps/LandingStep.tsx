@@ -15,42 +15,32 @@ import {
   Wallet,
   type LucideIcon,
 } from "lucide-react";
-import { AIRPORTS, DESTINATIONS, FEATURED_DESTINATIONS, SEARCHABLE_ORIGINS } from "@/data/airports";
+import { AIRPORTS, ALL_AIRPORTS, FEATURED_DESTINATIONS } from "@/data/airports";
 import { getFlights } from "@/data/mockFlights";
 import { getPlacesForDestination, getRegions } from "@/data/mockPlaces";
 import CitySelectDropdown from "@/components/ui/CitySelectDropdown";
-import { matchesDestination } from "@/lib/globalDiscovery";
+import { cityName, countryName, type TranslationKey } from "@/lib/i18n";
+import { useT } from "@/lib/useI18n";
 import { useTripStore } from "@/store/useTripStore";
 import type { Airport } from "@/types/trip";
 import { cn } from "@/lib/cn";
 import { CARD_HOVER, PHOTO_ZOOM, RISE_ITEM, STAGGER_PARENT, STEP_TRANSITION } from "@/lib/motion";
 
-const HOW_IT_WORKS: { icon: LucideIcon; title: string; text: string }[] = [
-  {
-    icon: Plane,
-    title: "Ülkeni & uçuşunu seç",
-    text: "Hedef ülkeyi seç; direkt ve aktarmalı uçuşları fiyat ve süreleriyle karşılaştır, rotanı haritada canlı izle.",
-  },
-  {
-    icon: Compass,
-    title: "Hikayelerle keşfet",
-    text: "Gezilecek yerleri ve yerel lezzetleri fotoğraf, kısa hikaye ve lokal ipuçlarıyla kartlar halinde incele, rotana ekle.",
-  },
-  {
-    icon: BedDouble,
-    title: "Akıllı plan & bütçe",
-    text: "Seçtiğin mekanlara göre en ideal otel bölgesi, gün sayısı, taşıt hatları ve canlı bütçe otomatik hesaplanır.",
-  },
+const HOW_IT_WORKS: { icon: LucideIcon; title: TranslationKey; text: TranslationKey }[] = [
+  { icon: Plane, title: "landing.how1Title", text: "landing.how1Text" },
+  { icon: Compass, title: "landing.how2Title", text: "landing.how2Text" },
+  { icon: BedDouble, title: "landing.how3Title", text: "landing.how3Text" },
 ];
 
-const HIGHLIGHTS: { icon: LucideIcon; label: string }[] = [
-  { icon: Route, label: "Direkt & aktarmalı rotalar" },
-  { icon: MapPinned, label: "Hikayeli mekan kartları" },
-  { icon: Wallet, label: "Canlı bütçe sayacı" },
+const HIGHLIGHTS: { icon: LucideIcon; label: TranslationKey }[] = [
+  { icon: Route, label: "landing.hl1" },
+  { icon: MapPinned, label: "landing.hl2" },
+  { icon: Wallet, label: "landing.hl3" },
 ];
 
 /** Bento ızgarasında ilk kart büyük (2×2), diğerleri tek hücre */
 function PopularRouteCard({ destination, large }: { destination: Airport; large: boolean }) {
+  const t = useT();
   // Kalkış henüz seçilmediyse "İstanbul'dan itibaren" fiyatı gösterilir
   const origin = useTripStore((s) => s.origin) ?? AIRPORTS.IST;
   const departureDate = useTripStore((s) => s.departureDate);
@@ -87,7 +77,7 @@ function PopularRouteCard({ destination, large }: { destination: Airport; large:
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={cover}
-            alt={destination.city}
+            alt={cityName(destination, t.locale)}
             loading="lazy"
             referrerPolicy="no-referrer"
             className={cn("h-full w-full object-cover", PHOTO_ZOOM)}
@@ -97,7 +87,7 @@ function PopularRouteCard({ destination, large }: { destination: Airport; large:
       <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/15 to-transparent" />
       {fromPrice !== null && (
         <span className="absolute right-3 top-3 rounded-full border border-white/20 bg-white/10 px-2.5 py-1 font-mono text-xs font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3)] backdrop-blur-xl">
-          ${fromPrice.toLocaleString("en-US")}&apos;dan
+          {t("landing.fromPrice", { price: `$${fromPrice.toLocaleString("en-US")}` })}
         </span>
       )}
       <div className={cn("absolute inset-x-0 bottom-0 p-4 text-white", large && "md:p-6")}>
@@ -107,10 +97,10 @@ function PopularRouteCard({ destination, large }: { destination: Airport; large:
             {origin.code} → {destination.code}
           </span>
         </div>
-        <h3 className={cn("mt-2 font-semibold", large ? "text-2xl md:text-3xl" : "text-lg")}>{destination.country}</h3>
+        <h3 className={cn("mt-2 font-semibold", large ? "text-2xl md:text-3xl" : "text-lg")}>{countryName(destination, t.locale)}</h3>
         <p className="mt-0.5 truncate text-sm text-white/75">{regions.join(" · ")}</p>
         <span className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-white/90 transition-colors group-hover:text-white">
-          Bu rotayı planla <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" />
+          {t("landing.planRoute")} <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" />
         </span>
       </div>
     </motion.button>
@@ -122,6 +112,7 @@ const sameCity = (a: Airport | null, b: Airport) => !!a && (a.code === b.code ||
 
 /** Hero altındaki hızlı rota önizleme çubuğu: Nereden ➔ Nereye ➔ Planlamaya Başla */
 function QuickRouteBar() {
+  const t = useT();
   const origin = useTripStore((s) => s.origin);
   const destination = useTripStore((s) => s.destination);
   const setOrigin = useTripStore((s) => s.setOrigin);
@@ -131,22 +122,22 @@ function QuickRouteBar() {
   return (
     <div className="glass-secondary relative z-50 mx-auto flex w-full max-w-3xl overflow-visible flex-col items-stretch gap-1 rounded-3xl p-2 text-left md:flex-row md:items-center">
       <CitySelectDropdown
-        label="Nereden"
+        label={t("landing.from")}
         icon={PlaneTakeoff}
         value={origin}
-        options={SEARCHABLE_ORIGINS}
+        options={ALL_AIRPORTS}
         isDisabled={(a) => sameCity(destination, a)}
-        disabledHint="Varış noktanla aynı şehir"
+        disabledHint={t("dd.sameAsDestination")}
         onChange={setOrigin}
       />
       <ArrowRight aria-hidden size={16} className="hidden shrink-0 text-ink/25 md:block" />
       <CitySelectDropdown
-        label="Nereye"
+        label={t("landing.to")}
         icon={PlaneLanding}
         value={destination}
-        options={DESTINATIONS}
+        options={ALL_AIRPORTS}
         isDisabled={(a) => sameCity(origin, a)}
-        matches={matchesDestination}
+        disabledHint={t("dd.sameAsOrigin")}
         onChange={setDestination}
       />
       <motion.button
@@ -155,7 +146,7 @@ function QuickRouteBar() {
         whileTap={{ scale: 0.98 }}
         className="flex shrink-0 items-center justify-center gap-2 rounded-2xl glass-primary px-6 py-4 text-[15px] font-semibold"
       >
-        Planlamaya Başla <ArrowRight size={18} />
+        {t("landing.start")} <ArrowRight size={18} />
       </motion.button>
     </div>
   );
@@ -163,6 +154,7 @@ function QuickRouteBar() {
 
 /** Adım 0: sade, ürün odaklı karşılama ekranı (hero + rota çubuğu + Bento destinasyonlar) */
 export default function LandingStep() {
+  const t = useT();
   const setStep = useTripStore((s) => s.setStep);
 
   return (
@@ -174,14 +166,15 @@ export default function LandingStep() {
             variants={RISE_ITEM}
             className="mx-auto max-w-3xl text-4xl font-bold leading-[1.1] tracking-tight text-ink md:text-6xl"
           >
-            Hayalindeki seyahati <span className="text-blue-600 dark:text-blue-400">adım adım</span> planla.
+            {t("landing.heroA")}
+            <span className="text-blue-600 dark:text-blue-400">{t("landing.heroEm")}</span>
+            {t("landing.heroB")}
           </motion.h1>
           <motion.p
             variants={RISE_ITEM}
             className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-ink/60 md:text-lg"
           >
-            Uçuşunu seç, gezilecek yerleri hikayeleriyle keşfet; otel bölgesi, gün planı ve bütçen otomatik
-            oluşsun.
+            {t("landing.heroText")}
           </motion.p>
 
           <motion.div variants={RISE_ITEM} className="relative z-50 mt-9">
@@ -193,7 +186,7 @@ export default function LandingStep() {
           >
             {HIGHLIGHTS.map(({ icon: Icon, label }) => (
               <span key={label} className="inline-flex items-center gap-1.5">
-                <Icon size={14} className="text-blue-600 dark:text-blue-400" /> {label}
+                <Icon size={14} className="text-blue-600 dark:text-blue-400" /> {t(label)}
               </span>
             ))}
           </motion.div>
@@ -205,12 +198,12 @@ export default function LandingStep() {
         <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">
-              Popüler rotalar
+              {t("landing.popularEyebrow")}
             </p>
-            <h2 className="mt-2 text-2xl font-bold text-ink md:text-3xl">İlham alacağın destinasyonlar</h2>
+            <h2 className="mt-2 text-2xl font-bold text-ink md:text-3xl">{t("landing.popularTitle")}</h2>
           </div>
           <p className="text-sm text-ink/55">
-            Bir rotaya tıkla ya da {DESTINATIONS.length} ülkelik küresel havuzdan seç; uçuş seçimine hemen geç.
+            {t("landing.popularText", { n: ALL_AIRPORTS.length })}
           </p>
         </div>
         <motion.div
@@ -230,9 +223,9 @@ export default function LandingStep() {
       <section className="relative z-10 mx-auto max-w-6xl px-4 py-12">
         <div className="mb-8 text-center">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">
-            Nasıl çalışır?
+            {t("landing.howEyebrow")}
           </p>
-          <h2 className="mt-2 text-2xl font-bold text-ink md:text-3xl">3 adımda hazır seyahat planı</h2>
+          <h2 className="mt-2 text-2xl font-bold text-ink md:text-3xl">{t("landing.howTitle")}</h2>
         </div>
         <motion.div
           variants={STAGGER_PARENT}
@@ -247,8 +240,8 @@ export default function LandingStep() {
               <span className="grid h-12 w-12 place-items-center rounded-2xl bg-blue-600/10 text-blue-600 ring-1 ring-inset ring-blue-600/15 dark:bg-blue-500/15 dark:text-blue-400 dark:ring-blue-400/20">
                 <Icon size={22} />
               </span>
-              <h3 className="mt-5 text-lg font-semibold text-ink">{title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-ink/60">{text}</p>
+              <h3 className="mt-5 text-lg font-semibold text-ink">{t(title)}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-ink/60">{t(text)}</p>
             </motion.div>
           ))}
         </motion.div>
@@ -262,10 +255,8 @@ export default function LandingStep() {
               <Crown size={22} />
             </span>
             <div>
-              <h3 className="text-lg font-semibold text-ink">Pro ile cebinde rehber</h3>
-              <p className="mt-1 max-w-xl text-sm text-ink/60">
-                Tam bütçe kırılımı, nokta atışı otel-taşıt haritası ve çevrimdışı PDF cep rehberi.
-              </p>
+              <h3 className="text-lg font-semibold text-ink">{t("landing.proTitle")}</h3>
+              <p className="mt-1 max-w-xl text-sm text-ink/60">{t("landing.proText")}</p>
             </div>
           </div>
           <button
@@ -273,11 +264,11 @@ export default function LandingStep() {
             onClick={() => setStep(1)}
             className="flex shrink-0 items-center gap-2 rounded-xl glass-secondary px-5 py-3 text-sm font-semibold text-ink active:scale-[0.98]"
           >
-            Ücretsiz dene <ArrowRight size={16} />
+            {t("landing.tryFree")} <ArrowRight size={16} />
           </button>
         </div>
         <p className="mt-10 text-center text-xs text-ink/40">
-          Harita: © OpenStreetMap katkıcıları · Görseller: Wikipedia (CC BY-SA) · Unsplash
+          {t("landing.credits")}
         </p>
       </section>
     </motion.div>

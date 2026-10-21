@@ -48,6 +48,7 @@ import {
   type TripPlan,
 } from "@/lib/routeOptimizer";
 import { fetchLocalTitles, fetchWikiImage } from "@/lib/wikipedia";
+import { useT } from "@/lib/useI18n";
 import { computeBudget, useTripStore } from "@/store/useTripStore";
 import { cn } from "@/lib/cn";
 import type { Airport, Flight, Hotel, IntercityTransfer, Place, TransitLeg, TripRoute } from "@/types/trip";
@@ -131,6 +132,7 @@ function GuideHero({
   destination: Airport;
   total: number;
 }) {
+  const t = useT();
   const travelers = useTripStore((s) => s.travelers);
   const isPro = useTripStore((s) => s.isPro);
   const openUpgradeModal = useTripStore((s) => s.openUpgradeModal);
@@ -194,7 +196,7 @@ function GuideHero({
             <button
               type="button"
               onClick={openUpgradeModal}
-              title="PDF cep rehberi Pro üyelikte"
+              title={t("guide.pdfLockedTitle")}
               className="flex items-center justify-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-5 py-3 text-sm font-semibold text-amber-700 hover:bg-amber-500/15 dark:text-amber-300"
             >
               🔒 Pro Özel: PDF Cep Rehberi İndir
@@ -235,6 +237,7 @@ interface BudgetCategory {
 }
 
 function useBudgetCategories(plan: TripPlan): { categories: BudgetCategory[]; total: number } {
+  const t = useT();
   const budget = useTripStore(useShallow(computeBudget));
   const selectedFlight = useTripStore((s) => s.selectedFlight);
   const recommendedHotels = useTripStore((s) => s.recommendedHotels);
@@ -251,7 +254,7 @@ function useBudgetCategories(plan: TripPlan): { categories: BudgetCategory[]; to
     const categories: BudgetCategory[] = [
       {
         key: "flight",
-        label: "Uçak Bileti",
+        label: t("budget.catFlight"),
         icon: Plane,
         color: "#38bdf8",
         amount: budget.flight,
@@ -267,7 +270,7 @@ function useBudgetCategories(plan: TripPlan): { categories: BudgetCategory[]; to
       },
       {
         key: "hotel",
-        label: "Konaklama",
+        label: t("budget.catHotel"),
         icon: BedDouble,
         color: "#818cf8",
         amount: budget.hotel,
@@ -279,7 +282,7 @@ function useBudgetCategories(plan: TripPlan): { categories: BudgetCategory[]; to
       },
       {
         key: "transit",
-        label: "Şehir İçi / Arası Taşıtlar",
+        label: t("budget.catTransit"),
         icon: TrainFront,
         color: "#22d3ee",
         amount: budget.transit,
@@ -301,7 +304,7 @@ function useBudgetCategories(plan: TripPlan): { categories: BudgetCategory[]; to
       },
       {
         key: "food",
-        label: "Yemek & Giriş Ücretleri",
+        label: t("budget.catFood"),
         icon: Ticket,
         color: "#fbbf24",
         amount: budget.foodAndEntries,
@@ -315,10 +318,11 @@ function useBudgetCategories(plan: TripPlan): { categories: BudgetCategory[]; to
       },
     ];
     return { categories, total: budget.total };
-  }, [plan, budget, selectedFlight, recommendedHotels, selectedPlaces, travelers]);
+  }, [plan, budget, selectedFlight, recommendedHotels, selectedPlaces, travelers, t]);
 }
 
 function BudgetTable({ categories, total, days }: { categories: BudgetCategory[]; total: number; days: number }) {
+  const t = useT();
   const isPro = useTripStore((s) => s.isPro);
   const travelers = useTripStore((s) => s.travelers);
 
@@ -387,7 +391,7 @@ function BudgetTable({ categories, total, days }: { categories: BudgetCategory[]
         </tbody>
         <tfoot>
           <tr>
-            <td className="pt-3 font-semibold text-ink">= Toplam Tahmini Maliyet</td>
+            <td className="pt-3 font-semibold text-ink">{t("budget.grandTotal")}</td>
             <td />
             <td className="pt-3 pl-3 text-right font-mono text-xl font-bold tabular-nums text-amber-600 dark:text-amber-400">
               {usd(total)}
@@ -1827,6 +1831,7 @@ function PhraseCards({ plan, langCode, country }: { plan: TripPlan; langCode: La
 // ------------------------------------------------------------------ Adım
 
 function GuideActionBar() {
+  const t = useT();
   const isPro = useTripStore((s) => s.isPro);
   const prevStep = useTripStore((s) => s.prevStep);
   const reset = useTripStore((s) => s.reset);
@@ -1840,10 +1845,10 @@ function GuideActionBar() {
         className="flex shrink-0 items-center gap-1.5 rounded-xl glass-secondary px-3 py-3 text-sm text-ink/70 hover:text-ink"
       >
         <ArrowLeft size={15} />
-        <span className="hidden sm:inline">Konaklamayı Düzenle</span>
+        <span className="hidden sm:inline">{t("guide.back")}</span>
       </button>
       <p className="min-w-0 flex-1 truncate text-xs text-ink/55 sm:text-sm">
-        {isPro ? "Pro: tam döküm, ulaşım hatları, dil kartları ve PDF aktif." : "Ücretsiz plan: genel rota ve bütçe özeti."}
+        {isPro ? t("guide.proOn") : t("guide.free")}
       </p>
       <button
         type="button"
@@ -1851,7 +1856,7 @@ function GuideActionBar() {
         className="flex shrink-0 items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium text-ink/70 transition-colors hover:bg-ink/[0.05] hover:text-ink"
       >
         <RotateCcw size={15} />
-        <span className="hidden sm:inline">Yeni Yolculuk</span>
+        <span className="hidden sm:inline">{t("guide.newTrip")}</span>
       </button>
       {isPro ? (
         <button
@@ -1860,16 +1865,16 @@ function GuideActionBar() {
           className="flex shrink-0 items-center gap-2 rounded-xl glass-primary px-5 py-3 text-sm font-semibold text-white"
         >
           <Printer size={16} />
-          <span className="hidden md:inline">PDF Cep Rehberi</span>
+          <span className="hidden md:inline">{t("guide.pdf")}</span>
         </button>
       ) : (
         <button
           type="button"
           onClick={openUpgradeModal}
-          title="PDF cep rehberi Pro üyelikte"
+          title={t("guide.pdfLockedTitle")}
           className="flex shrink-0 items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm font-semibold text-amber-700 hover:bg-amber-500/15 dark:text-amber-300"
         >
-          🔒<span className="hidden md:inline"> Pro Özel: PDF Cep Rehberi İndir</span>
+          🔒<span className="hidden md:inline">{t("guide.pdfLocked")}</span>
         </button>
       )}
     </div>

@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Crown,
   Globe2,
+  Languages,
   LogOut,
   MapPin,
   Moon,
@@ -20,12 +21,15 @@ import {
 import { useShallow } from "zustand/react/shallow";
 import { estimateTripDays } from "@/data/mockPlaces";
 import { authApi } from "@/lib/authClient";
+import { LOCALES, LOCALE_META } from "@/lib/i18n";
+import { useT } from "@/lib/useI18n";
 import { buildTripPlan } from "@/lib/routeOptimizer";
 import { STEPS, computeBudget, useTripStore } from "@/store/useTripStore";
 import { cn } from "@/lib/cn";
 import AnimatedNumber from "./AnimatedNumber";
 
 function BudgetCounter() {
+  const t = useT();
   const budget = useTripStore(useShallow(computeBudget));
   const isPro = useTripStore((s) => s.isPro);
   const [open, setOpen] = useState(false);
@@ -39,10 +43,10 @@ function BudgetCounter() {
   }
 
   const rows = [
-    { label: "Uçuş", value: budget.flight },
-    { label: "Otel", value: budget.hotel },
-    { label: "Ulaşım", value: budget.transit },
-    { label: "Yemek & Girişler", value: budget.foodAndEntries },
+    { label: t("budget.flight"), value: budget.flight },
+    { label: t("budget.hotel"), value: budget.hotel },
+    { label: t("budget.transit"), value: budget.transit },
+    { label: t("budget.food"), value: budget.foodAndEntries },
   ];
 
   return (
@@ -51,7 +55,7 @@ function BudgetCounter() {
         type="button"
         onClick={() => setOpen((o) => !o)}
         className="relative flex h-10 items-center gap-2.5 overflow-hidden rounded-xl glass-chip px-2.5 text-left sm:h-11 sm:px-3"
-        aria-label="Canlı bütçe"
+        aria-label={t("budget.live")}
       >
         {/* Her değişimde kısa bir ışık süpürmesi (artış yeşil/altın, azalış gül) */}
         <AnimatePresence>
@@ -73,7 +77,7 @@ function BudgetCounter() {
           <Wallet size={16} />
         </span>
         <span className="relative flex flex-col leading-tight">
-          <span className="text-[9px] font-medium uppercase tracking-[0.12em] text-ink/50 sm:text-[10px] sm:tracking-[0.14em]">Canlı Bütçe</span>
+          <span className="text-[9px] font-medium uppercase tracking-[0.12em] text-ink/50 sm:text-[10px] sm:tracking-[0.14em]">{t("budget.live")}</span>
           <AnimatedNumber value={budget.total} className="font-mono text-sm font-semibold tabular-nums text-ink sm:text-base" />
         </span>
       </button>
@@ -107,7 +111,7 @@ function BudgetCounter() {
             transition={{ duration: 0.18 }}
             className="card absolute right-0 top-full z-[999] mt-2 w-64 max-w-[calc(100vw-1.5rem)] rounded-2xl p-4"
           >
-            <p className="mb-3 text-xs font-medium uppercase tracking-[0.14em] text-ink/50">Bütçe Dökümü</p>
+            <p className="mb-3 text-xs font-medium uppercase tracking-[0.14em] text-ink/50">{t("budget.breakdown")}</p>
             <ul className="space-y-2 text-sm">
               {rows.map((r, i) => (
                 <li key={r.label} className="flex items-center justify-between">
@@ -119,14 +123,14 @@ function BudgetCounter() {
               ))}
             </ul>
             <div className="mt-3 flex items-center justify-between border-t border-ink/10 pt-3 text-sm">
-              <span className="font-medium text-ink">Toplam</span>
+              <span className="font-medium text-ink">{t("budget.total")}</span>
               <span className="font-mono font-semibold tabular-nums text-emerald-600 dark:text-emerald-300">
                 ${budget.total.toLocaleString("en-US")}
               </span>
             </div>
             {!isPro && (
               <p className="mt-3 flex items-center gap-1.5 text-[11px] text-amber-700 dark:text-amber-200/80">
-                <Crown size={12} /> Tam kırılım Pro modunda açılır.
+                <Crown size={12} /> {t("budget.proHint")}
               </p>
             )}
           </motion.div>
@@ -138,6 +142,7 @@ function BudgetCounter() {
 
 /** Adım 2'den itibaren: seçilen mekan sayısı + gezi günü (Adım 3+ akıllı plandaki gerçek gün sayısı) */
 function TripStats({ className }: { className?: string }) {
+  const t = useT();
   const currentStep = useTripStore((s) => s.currentStep);
   const selectedPlaces = useTripStore((s) => s.selectedPlaces);
   const destination = useTripStore((s) => s.destination);
@@ -158,7 +163,7 @@ function TripStats({ className }: { className?: string }) {
       className={cn("items-center gap-3 rounded-xl glass-chip px-3 py-1.5", className)}
     >
       <span className="flex flex-col leading-tight">
-        <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink/50">Mekan</span>
+        <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink/50">{t("stats.places")}</span>
         <span className="flex items-center gap-1 font-mono text-base font-semibold tabular-nums text-ink">
           <MapPin size={13} className="text-amber-500 dark:text-amber-300" />
           <AnimatePresence mode="popLayout" initial={false}>
@@ -175,7 +180,7 @@ function TripStats({ className }: { className?: string }) {
       </span>
       <span className="h-8 w-px bg-ink/10" />
       <span className="flex flex-col leading-tight">
-        <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink/50">Tahmini</span>
+        <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink/50">{t("stats.estimated")}</span>
         <span className="flex items-center gap-1 font-mono text-base font-semibold tabular-nums text-ink">
           <CalendarDays size={13} className="text-blue-600 dark:text-blue-300" />
           <AnimatePresence mode="popLayout" initial={false}>
@@ -183,7 +188,7 @@ function TripStats({ className }: { className?: string }) {
               {days}
             </motion.span>
           </AnimatePresence>
-          <span className="text-xs font-normal text-ink/50">gün</span>
+          <span className="text-xs font-normal text-ink/50">{t("stats.days")}</span>
         </span>
       </span>
     </motion.div>
@@ -191,6 +196,7 @@ function TripStats({ className }: { className?: string }) {
 }
 
 function ThemeToggle() {
+  const t = useT();
   const theme = useTripStore((s) => s.theme);
   const toggleTheme = useTripStore((s) => s.toggleTheme);
   const isDark = theme === "dark";
@@ -199,8 +205,8 @@ function ThemeToggle() {
     <button
       type="button"
       onClick={toggleTheme}
-      aria-label={isDark ? "Aydınlık temaya geç" : "Karanlık temaya geç"}
-      title={isDark ? "Aydınlık tema" : "Karanlık tema"}
+      aria-label={isDark ? t("theme.toLight") : t("theme.toDark")}
+      title={isDark ? t("theme.toLight") : t("theme.toDark")}
       className="relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl glass-chip sm:h-11 sm:w-11 text-ink/80 transition-colors hover:bg-ink/[0.07] hover:text-ink"
     >
       <AnimatePresence mode="wait" initial={false}>
@@ -219,6 +225,7 @@ function ThemeToggle() {
 }
 
 function ProToggle() {
+  const t = useT();
   const isPro = useTripStore((s) => s.isPro);
   const openUpgradeModal = useTripStore((s) => s.openUpgradeModal);
 
@@ -229,9 +236,9 @@ function ProToggle() {
       aria-haspopup="dialog"
       onClick={openUpgradeModal}
       className="flex h-10 shrink-0 items-center gap-2 rounded-xl glass-chip px-2.5 text-xs font-medium sm:h-11 sm:gap-2.5 sm:px-3"
-      title={isPro ? "Pro üyelik durumu" : "Ücretsiz · Pro'ya Yükselt"}
+      title={isPro ? t("pro.status") : t("pro.upgrade")}
     >
-      <span className={cn("hidden transition-colors sm:inline", isPro ? "text-ink/40" : "text-ink")}>Ücretsiz</span>
+      <span className={cn("hidden transition-colors sm:inline", isPro ? "text-ink/40" : "text-ink")}>{t("pro.free")}</span>
       <span
         className={cn(
           "relative h-6 w-11 rounded-full transition-colors",
@@ -256,11 +263,12 @@ function ProToggle() {
 
 /** Adım 1 ➔ Adım 2 ➔ Adım 3 ➔ Adım 4; tamamlanan adımlara tıklayarak geri dönülebilir */
 function StepProgress({ className }: { className?: string }) {
+  const t = useT();
   const currentStep = useTripStore((s) => s.currentStep);
   const setStep = useTripStore((s) => s.setStep);
 
   return (
-    <nav aria-label="Simülasyon adımları" className={cn("flex items-center gap-0.5 sm:gap-1", className)}>
+    <nav aria-label={t("steps.aria")} className={cn("flex items-center gap-0.5 sm:gap-1", className)}>
       {STEPS.map((s, i) => {
         const done = s.id < currentStep;
         const active = s.id === currentStep;
@@ -276,7 +284,7 @@ function StepProgress({ className }: { className?: string }) {
               type="button"
               disabled={!done}
               onClick={() => setStep(s.id)}
-              title={s.title}
+              title={t(s.title)}
               aria-current={active ? "step" : undefined}
               className={cn(
                 "flex shrink-0 items-center gap-1.5 rounded-full py-1 pl-1 pr-2 text-[11px] font-medium transition-colors sm:gap-2 sm:pr-3 sm:text-xs",
@@ -297,9 +305,9 @@ function StepProgress({ className }: { className?: string }) {
               </span>
               {/* Mobil/tablet: kısa ad ("Uçuş"); masaüstü: "Adım 1", geniş ekranda "Adım 1 · Uçuş" */}
               <span className="whitespace-nowrap">
-                <span className="lg:hidden">{s.short}</span>
-                <span className="hidden lg:inline">Adım {s.id}</span>
-                <span className="hidden 2xl:inline"> · {s.short}</span>
+                <span className="lg:hidden">{t(s.short)}</span>
+                <span className="hidden lg:inline">{t("steps.step", { n: s.id })}</span>
+                <span className="hidden 2xl:inline"> · {t(s.short)}</span>
               </span>
             </button>
           </Fragment>
@@ -311,6 +319,7 @@ function StepProgress({ className }: { className?: string }) {
 
 /** 👤 Giriş / Kayıt Ol; oturum açıkken ad + rozet ve kullanıcı menüsü (son rota, yönetici paneli, çıkış) */
 function AccountButton() {
+  const t = useT();
   const user = useTripStore((s) => s.user);
   const isPro = useTripStore((s) => s.isPro);
   const openAuthModal = useTripStore((s) => s.openAuthModal);
@@ -337,12 +346,12 @@ function AccountButton() {
         type="button"
         aria-haspopup="dialog"
         onClick={() => openAuthModal("login")}
-        title="Giriş / Kayıt Ol"
-        aria-label="Giriş / Kayıt Ol"
+        title={t("account.signIn")}
+        aria-label={t("account.signIn")}
         className="flex h-10 shrink-0 items-center gap-2 rounded-xl glass-chip px-2.5 text-xs font-semibold text-ink sm:h-11 sm:px-3"
       >
         <span aria-hidden className="text-base leading-none">👤</span>
-        <span className="hidden md:inline">Giriş / Kayıt Ol</span>
+        <span className="hidden md:inline">{t("account.signIn")}</span>
       </button>
     );
   }
@@ -383,7 +392,7 @@ function AccountButton() {
         <span className="hidden max-w-[9rem] flex-col leading-tight md:flex">
           <span className="truncate text-xs font-semibold text-ink">{user.name}</span>
           <span className={cn("text-[10px] font-medium", pro ? "text-amber-600 dark:text-amber-300" : "text-ink/50")}>
-            {pro ? "👑 Pro Gezgin" : "Ücretsiz Üye"}
+            {pro ? t("account.proBadge") : t("account.freeBadge")}
           </span>
         </span>
       </button>
@@ -403,7 +412,7 @@ function AccountButton() {
               <p className="truncate text-xs text-ink/55">{user.email}</p>
               <p className="mt-2 flex items-start gap-1.5 text-[11px] text-ink/60">
                 <Route size={12} className="mt-0.5 shrink-0 text-blue-500" />
-                <span>{user.lastRoute || "Henüz kayıtlı rota yok"}</span>
+                <span>{user.lastRoute || t("account.noRoute")}</span>
               </p>
             </div>
             <div className="my-1 h-px bg-ink/10" />
@@ -416,7 +425,7 @@ function AccountButton() {
               }}
               className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-ink/80 hover:bg-ink/[0.05] hover:text-ink"
             >
-              <ShieldCheck size={15} className="text-emerald-500" /> 🛡️ Yönetici / Excel Tablosu
+              <ShieldCheck size={15} className="text-emerald-500" /> {t("account.admin")}
             </button>
             <button
               type="button"
@@ -424,7 +433,7 @@ function AccountButton() {
               onClick={() => void logout()}
               className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-500/10 dark:text-rose-400"
             >
-              <LogOut size={15} /> Çıkış Yap
+              <LogOut size={15} /> {t("account.logout")}
             </button>
           </motion.div>
         )}
@@ -433,7 +442,89 @@ function AccountButton() {
   );
 }
 
+/** 🌐 Dil seçici: bayrak + dil kodu; seçim çerez + localStorage'a kaydedilir */
+function LanguageSelector() {
+  const t = useT();
+  const locale = useTripStore((s) => s.locale);
+  const setLocale = useTripStore((s) => s.setLocale);
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => !rootRef.current?.contains(e.target as Node) && setOpen(false);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={t("lang.label")}
+        title={t("lang.label")}
+        onClick={() => setOpen((o) => !o)}
+        className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl glass-chip px-2.5 text-xs font-semibold text-ink sm:h-11 sm:px-3"
+      >
+        <span aria-hidden className="text-sm leading-none">🌐</span>
+        <span className="font-mono uppercase tracking-wide">{locale}</span>
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.ul
+            role="listbox"
+            aria-label={t("lang.label")}
+            initial={{ opacity: 0, y: -6, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.98 }}
+            transition={{ duration: 0.18 }}
+            style={{ transformOrigin: "top right" }}
+            className="card absolute right-0 top-full z-[999] mt-2 w-52 rounded-2xl p-1.5"
+          >
+            <li className="flex items-center gap-1.5 px-2.5 pb-1.5 pt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink/45">
+              <Languages size={12} /> {t("lang.label")}
+            </li>
+            {LOCALES.map((l) => {
+              const selected = l === locale;
+              return (
+                <li key={l} role="option" aria-selected={selected}>
+                  <button
+                    type="button"
+                    lang={l}
+                    onClick={() => {
+                      setLocale(l);
+                      setOpen(false);
+                    }}
+                    className={cn(
+                      "flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-sm transition-colors",
+                      selected ? "bg-blue-500/15 text-ink" : "text-ink/75 hover:bg-ink/[0.05] hover:text-ink",
+                    )}
+                  >
+                    <span aria-hidden className="text-base leading-none">{LOCALE_META[l].flag}</span>
+                    <span className="flex-1 font-medium">{LOCALE_META[l].label}</span>
+                    <span className="font-mono text-[11px] uppercase text-ink/45">{l}</span>
+                    <Check size={14} strokeWidth={3} className={cn("text-blue-600 dark:text-blue-400", !selected && "invisible")} />
+                  </button>
+                </li>
+              );
+            })}
+          </motion.ul>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 export default function TopBar() {
+  const t = useT();
   const currentStep = useTripStore((s) => s.currentStep);
   const setStep = useTripStore((s) => s.setStep);
 
@@ -445,14 +536,14 @@ export default function TopBar() {
           type="button"
           onClick={() => setStep(0)}
           className="flex shrink-0 items-center gap-2.5 rounded-xl text-left"
-          aria-label="Ana sayfaya dön"
+          aria-label={t("nav.home")}
         >
           <span className="grid h-9 w-9 place-items-center rounded-xl glass-primary">
             <Globe2 size={18} />
           </span>
           <span className="hidden flex-col leading-tight sm:flex">
             <span className="text-sm font-semibold text-ink">Traveller</span>
-            <span className="text-[10px] uppercase tracking-[0.14em] text-ink/50">Seyahat Simülatörü</span>
+            <span className="text-[10px] uppercase tracking-[0.14em] text-ink/50">{t("brand.tagline")}</span>
           </span>
         </button>
 
@@ -461,6 +552,7 @@ export default function TopBar() {
         </div>
         <div className="flex min-w-0 shrink-0 items-center justify-end gap-1.5 sm:gap-2">
           <TripStats className="hidden xl:flex" />
+          <LanguageSelector />
           <ThemeToggle />
           <AccountButton />
           <ProToggle />

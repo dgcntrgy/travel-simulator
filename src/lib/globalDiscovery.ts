@@ -1,5 +1,5 @@
 import { destination as offsetPoint, distance, point } from "@turf/turf";
-import { AIRPORTS, type AirportCode } from "@/data/airports";
+import { profileForAirport } from "@/lib/globalRouteEngine";
 import { HOTEL_IMAGES } from "@/data/mockHotels";
 import { getPlacesForDestination } from "@/data/mockPlaces";
 import type { Airport, Hotel, HotelTier, LngLat, Place, PlaceCategory } from "@/types/trip";
@@ -7,7 +7,7 @@ import type { Airport, Hotel, HotelTier, LngLat, Place, PlaceCategory } from "@/
 /**
  * Küresel keşif motoru — kürasyonlu veri seti olmayan ülkeler için her şeyi ücretsiz kaynaklardan üretir:
  * 1. Ülke havuzu: kıta, şehirler (koordinat), maliyet endeksi ve yerel dil kartları.
- * 2. Dinamik uçuş şablonları: `turf.distance` ile mesafe → süre/fiyat + en az sapan bölgesel aktarma merkezi.
+ * 2. Uçuş şablonları artık `globalRouteEngine.generateFlightTemplates` içinde (dünyadaki tüm havalimanları).
  * 3. Dinamik oteller: seçili mekanların `turf.centerOfMass` merkezi etrafında 3 kademe otel.
  * 4. Canlı mekan keşfi: Wikimedia GeoSearch (Action API, CORS `origin=*`) + Türkçe/İngilizce özetler.
  */
@@ -94,13 +94,9 @@ export const DESTINATION_PROFILES: Record<string, DestinationProfile> = {
   LIM: { continent: "Amerika", cities: [city("Lima", -77.0428, -12.0464), city("Cusco", -71.9675, -13.5319)], costIndex: 0.6, language: "es" },
 };
 
-const FALLBACK_PROFILE: DestinationProfile = { continent: "Avrupa", cities: [], costIndex: 1, language: "en" };
-
-/** Profil bulunamazsa varış şehrinden tek şehirli profil üretir */
+/** Kürasyonlu profil yoksa küresel rota motoru şehir merkezli tek şehirli profil üretir (ülkenin dili + maliyeti) */
 export function getDestinationProfile(destination: Airport): DestinationProfile {
-  const profile = DESTINATION_PROFILES[destination.code];
-  if (profile) return profile;
-  return { ...FALLBACK_PROFILE, cities: [{ name: destination.city, coordinates: destination.coordinates }] };
+  return DESTINATION_PROFILES[destination.code] ?? profileForAirport(destination);
 }
 
 /** Kürasyonlu (elle hazırlanmış) veri seti var mı? */
@@ -176,171 +172,6 @@ function hash(seed: string): number {
 }
 
 const km = (a: LngLat, b: LngLat) => distance(point(a), point(b), { units: "kilometers" });
-
-// ------------------------------------------------------------------ Dinamik uçuş şablonları
-
-export interface FlightTemplate {
-  airline: string;
-  airlineCode: string;
-  flightNumber: string;
-  /** Tanımlıysa aktarmalı uçuş */
-  hub?: AirportCode;
-  layoverMinutes?: number;
-  /** Kişi başı gidiş-dönüş baz fiyat (USD). Kürasyonlu şablonlarda İstanbul (IST) çıkışlı, jeneratörde gerçek kalkışa göre. */
-  basePrice: number;
-  /** Yerel kalkış saati, "HH:MM" */
-  departure: string;
-  cabinBaggageKg: number;
-  checkedBaggageKg: number;
-  tags: string[];
-}
-
-/** Bölgesel aktarma merkezleri ve ana taşıyıcıları */
-const HUB_CARRIERS: { hub: AirportCode; airline: string; code: string; checkedKg: number; tag: string }[] = [
-  { hub: "DOH", airline: "Qatar Airways", code: "QR", checkedKg: 30, tag: "Ödüllü servis" },
-  { hub: "DXB", airline: "Emirates", code: "EK", checkedKg: 35, tag: "Geniş gövde" },
-  { hub: "FRA", airline: "Lufthansa", code: "LH", checkedKg: 23, tag: "Star Alliance" },
-  { hub: "MUC", airline: "Lufthansa", code: "LH", checkedKg: 23, tag: "Star Alliance" },
-  { hub: "VIE", airline: "Austrian Airlines", code: "OS", checkedKg: 23, tag: "Kısa aktarma" },
-  { hub: "AMS", airline: "KLM", code: "KL", checkedKg: 23, tag: "SkyTeam" },
-  { hub: "LHR", airline: "British Airways", code: "BA", checkedKg: 23, tag: "oneworld" },
-  { hub: "CDG", airline: "Air France", code: "AF", checkedKg: 23, tag: "SkyTeam" },
-  { hub: "IST", airline: "Türk Hava Yolları", code: "TK", checkedKg: 30, tag: "İstanbul aktarmalı" },
-];
-
-const DEPARTURES = ["01:35", "06:20", "08:45", "10:15", "13:40", "16:55", "19:30", "22:10"];
-
-/** Ülke başına bayrak taşıyıcı (direkt uçuş) ve isteğe bağlı düşük maliyetli havayolu */
-const COUNTRY_CARRIERS: Record<string, { airline: string; code: string; lowCost?: { airline: string; code: string } }> = {
-  "Türkiye": { airline: "Türk Hava Yolları", code: "TK", lowCost: { airline: "Pegasus", code: "PC" } },
-  "Birleşik Krallık": { airline: "British Airways", code: "BA", lowCost: { airline: "easyJet", code: "U2" } },
-  "Fransa": { airline: "Air France", code: "AF", lowCost: { airline: "Transavia", code: "TO" } },
-  "Almanya": { airline: "Lufthansa", code: "LH", lowCost: { airline: "Eurowings", code: "EW" } },
-  "Hollanda": { airline: "KLM", code: "KL", lowCost: { airline: "Transavia", code: "HV" } },
-  "İtalya": { airline: "ITA Airways", code: "AZ", lowCost: { airline: "Ryanair", code: "FR" } },
-  "İspanya": { airline: "Iberia", code: "IB", lowCost: { airline: "Vueling", code: "VY" } },
-  "Avusturya": { airline: "Austrian Airlines", code: "OS", lowCost: { airline: "Wizz Air", code: "W6" } },
-  "İsviçre": { airline: "Swiss", code: "LX", lowCost: { airline: "easyJet", code: "U2" } },
-  "Yunanistan": { airline: "Aegean Airlines", code: "A3" },
-  "Portekiz": { airline: "TAP Air Portugal", code: "TP" },
-  "Çekya": { airline: "Smartwings", code: "QS" },
-  "Macaristan": { airline: "Wizz Air", code: "W6" },
-  "Hırvatistan": { airline: "Croatia Airlines", code: "OU" },
-  "Gürcistan": { airline: "Georgian Airways", code: "A9" },
-  "ABD": { airline: "United Airlines", code: "UA", lowCost: { airline: "JetBlue", code: "B6" } },
-  "Kanada": { airline: "Air Canada", code: "AC", lowCost: { airline: "WestJet", code: "WS" } },
-  "Meksika": { airline: "Aeroméxico", code: "AM", lowCost: { airline: "Volaris", code: "Y4" } },
-  "Brezilya": { airline: "LATAM Brasil", code: "LA", lowCost: { airline: "GOL", code: "G3" } },
-  "Arjantin": { airline: "Aerolíneas Argentinas", code: "AR" },
-  "Peru": { airline: "LATAM Perú", code: "LA" },
-  "BAE": { airline: "Emirates", code: "EK", lowCost: { airline: "flydubai", code: "FZ" } },
-  "Katar": { airline: "Qatar Airways", code: "QR" },
-  "Ürdün": { airline: "Royal Jordanian", code: "RJ" },
-  "Mısır": { airline: "EgyptAir", code: "MS" },
-  "Fas": { airline: "Royal Air Maroc", code: "AT" },
-  "Güney Afrika": { airline: "Airlink", code: "4Z" },
-  "Kenya": { airline: "Kenya Airways", code: "KQ" },
-  "Japonya": { airline: "Japan Airlines", code: "JL", lowCost: { airline: "Peach", code: "MM" } },
-  "Güney Kore": { airline: "Korean Air", code: "KE", lowCost: { airline: "Jeju Air", code: "7C" } },
-  "Singapur": { airline: "Singapore Airlines", code: "SQ", lowCost: { airline: "Scoot", code: "TR" } },
-  "Tayland": { airline: "Thai Airways", code: "TG", lowCost: { airline: "AirAsia", code: "FD" } },
-  "Hong Kong": { airline: "Cathay Pacific", code: "CX", lowCost: { airline: "HK Express", code: "UO" } },
-  "Hindistan": { airline: "Air India", code: "AI", lowCost: { airline: "IndiGo", code: "6E" } },
-  "Çin": { airline: "Air China", code: "CA" },
-  "Vietnam": { airline: "Vietnam Airlines", code: "VN", lowCost: { airline: "VietJet Air", code: "VJ" } },
-  "Endonezya": { airline: "Garuda Indonesia", code: "GA" },
-  "Avustralya": { airline: "Qantas", code: "QF", lowCost: { airline: "Jetstar", code: "JQ" } },
-};
-
-/** Bu mesafenin (km) altında bayrak taşıyıcının direkt uçuşu var kabul edilir */
-const DIRECT_MAX_KM = 12_500;
-/** Düşük maliyetli direkt seçenek bu mesafeye kadar */
-const LOW_COST_MAX_KM = 3_800;
-/** Aktarma rotası, direkt mesafenin en fazla bu katı olabilir */
-const MAX_DETOUR = 1.55;
-
-/** Gidiş-dönüş ekonomi fiyatı (kürasyonlu şablonlara kalibre: IST-HND ≈ $1.170, IST-FCO ≈ $275) */
-function roundTripPrice(routeKm: number): number {
-  return 110 + routeKm * 0.118;
-}
-
-/**
- * Kürasyonlu şablonu olmayan rotalar (veya Türkiye dışı kalkışlar) için gerçekçi uçuş seçenekleri üretir:
- * - Mesafe uygunsa kalkış ülkesinin bayrak taşıyıcısıyla direkt (yoksa varış ülkesininki);
- *   kısa mesafede ek olarak düşük maliyetli havayolu (Pegasus, easyJet, AirAsia…).
- * - Sapma oranı en düşük 2 farklı havayolunun aktarma merkezi (Doha, Dubai, Frankfurt, İstanbul…).
- * Fiyatlar gerçek kalkış noktasına göre hesaplanır (`basePrice` ölçeklenmeden kullanılır);
- * süreler `mockFlights.getFlights` içindeki ortak motordan gelir.
- */
-export function generateFlightTemplates(origin: Airport, destination: Airport): FlightTemplate[] {
-  const directKm = km(origin.coordinates, destination.coordinates);
-  const seed = (s: string) => hash(`${origin.code}-${destination.code}:${s}`);
-  const templates: FlightTemplate[] = [];
-
-  const home = COUNTRY_CARRIERS[origin.country];
-  const directCarrier = home ?? COUNTRY_CARRIERS[destination.country];
-  if (directCarrier && directKm <= DIRECT_MAX_KM) {
-    templates.push({
-      airline: directCarrier.airline,
-      airlineCode: directCarrier.code,
-      flightNumber: `${directCarrier.code}${(seed("direct") % 1800) + 10}`,
-      basePrice: Math.round(roundTripPrice(directKm)),
-      departure: DEPARTURES[seed("direct-dep") % DEPARTURES.length],
-      cabinBaggageKg: 8,
-      checkedBaggageKg: directKm > 5000 ? 46 : 23,
-      tags: ["En hızlı", "Kesintisiz"],
-    });
-  }
-  const lowCost = home?.lowCost;
-  if (lowCost && directKm <= LOW_COST_MAX_KM) {
-    templates.push({
-      airline: lowCost.airline,
-      airlineCode: lowCost.code,
-      flightNumber: `${lowCost.code}${(seed("lc") % 900) + 100}`,
-      basePrice: Math.round(roundTripPrice(directKm) * 0.62),
-      departure: DEPARTURES[(seed("lc-dep") + 3) % DEPARTURES.length],
-      cabinBaggageKg: 8,
-      checkedBaggageKg: 0,
-      tags: ["Düşük maliyetli", "Bagaj ekstra"],
-    });
-  }
-
-  const ranked = HUB_CARRIERS.map((carrier) => {
-    const hub = AIRPORTS[carrier.hub];
-    const toHub = km(origin.coordinates, hub.coordinates);
-    const fromHub = km(hub.coordinates, destination.coordinates);
-    const detour = (toHub + fromHub) / Math.max(1, directKm);
-    return { carrier, toHub, fromHub, detour };
-  })
-    .filter((h) => h.toHub > 300 && h.fromHub > 450)
-    .sort((a, b) => a.detour - b.detour);
-  // Hiç seçenek kalmazsa (çok uzun / alışılmadık rota) en az sapan merkez yine de sunulur
-  const viable = ranked.filter((h) => h.detour <= MAX_DETOUR);
-  const hubs = viable.length || templates.length ? viable : ranked.slice(0, 1);
-
-  const usedAirlines = new Set<string>(directCarrier ? [directCarrier.code] : []);
-  let layovers = 0;
-  for (const { carrier, toHub, fromHub, detour } of hubs) {
-    if (usedAirlines.has(carrier.code) || layovers >= 2) continue;
-    usedAirlines.add(carrier.code);
-    layovers++;
-    const n = seed(carrier.code);
-    templates.push({
-      airline: carrier.airline,
-      airlineCode: carrier.code,
-      flightNumber: `${carrier.code}${(n % 800) + 100} · ${carrier.code}${((n >> 3) % 800) + 100}`,
-      hub: carrier.hub,
-      layoverMinutes: 70 + (n % 12) * 15,
-      basePrice: Math.round(roundTripPrice(Math.max(toHub + fromHub, directKm)) * 0.8),
-      departure: DEPARTURES[(n >> 5) % DEPARTURES.length],
-      cabinBaggageKg: carrier.code === "BA" ? 23 : 7,
-      checkedBaggageKg: carrier.checkedKg,
-      tags: [detour < 1.08 ? "Az sapma" : carrier.tag],
-    });
-  }
-
-  return templates;
-}
 
 // ------------------------------------------------------------------ Dinamik otel üretici
 

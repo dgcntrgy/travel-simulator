@@ -14,6 +14,7 @@ import {
   sanitizeInput,
   sanitizePhone,
 } from "@/lib/security";
+import { useT } from "@/lib/useI18n";
 import { useTripStore } from "@/store/useTripStore";
 
 const INPUT =
@@ -26,6 +27,7 @@ export default function AuthModal() {
 }
 
 function AuthDialog() {
+  const t = useT();
   const close = useTripStore((s) => s.closeAuthModal);
   const initialView = useTripStore((s) => s.authView);
   const setUser = useTripStore((s) => s.setUser);
@@ -49,11 +51,11 @@ function AuthDialog() {
   const validate = (): string | null => {
     const name = sanitizeInput(form.name, 80);
     const email = sanitizeEmail(form.email);
-    if (isRegister && name.length < 2) return "Ad Soyad en az 2 karakter olmalı.";
-    if (!isValidEmail(email)) return "Geçerli bir e-posta gir.";
-    if (isRegister && !isValidPhone(sanitizePhone(form.phone))) return "Telefon numarası geçersiz (7–15 rakam).";
-    if (isRegister) return passwordProblem(form.password);
-    return form.password ? null : "Şifreni gir.";
+    if (isRegister && name.length < 2) return t("auth.errName");
+    if (!isValidEmail(email)) return t("auth.errEmail");
+    if (isRegister && !isValidPhone(sanitizePhone(form.phone))) return t("auth.errPhone");
+    if (isRegister) return passwordProblem(form.password) ? t("auth.errPassword") : null;
+    return form.password ? null : t("auth.errPasswordMissing");
   };
 
   const submit = async () => {
@@ -101,7 +103,7 @@ function AuthDialog() {
       <motion.div
         role="dialog"
         aria-modal="true"
-        aria-label={isRegister ? "Kayıt ol" : "Giriş yap"}
+        aria-label={isRegister ? t("auth.register") : t("auth.login")}
         initial={{ opacity: 0, y: 24, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 16, scale: 0.97 }}
@@ -114,7 +116,7 @@ function AuthDialog() {
         <button
           type="button"
           onClick={close}
-          aria-label="Kapat"
+          aria-label={t("common.close")}
           className="absolute right-4 top-4 z-10 grid h-9 w-9 place-items-center rounded-full glass-secondary text-ink/70"
         >
           <X size={16} />
@@ -122,11 +124,11 @@ function AuthDialog() {
 
         <div className="relative p-6 md:p-8">
           <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-blue-600 dark:text-blue-400">
-            <User size={13} /> Traveller Hesabı
+            <User size={13} /> {t("auth.account")}
           </p>
-          <h2 className="mt-1.5 pr-10 text-2xl font-bold">{isRegister ? "Ücretsiz hesap oluştur" : "Tekrar hoş geldin"}</h2>
+          <h2 className="mt-1.5 pr-10 text-2xl font-bold">{isRegister ? t("auth.registerTitle") : t("auth.loginTitle")}</h2>
           <p className="mt-1 text-sm text-ink/60">
-            {isRegister ? "Rotan ve Pro durumun hesabına kaydedilsin." : "Kaldığın rotaya ve Pro ayrıcalıklarına dön."}
+            {isRegister ? t("auth.registerText") : t("auth.loginText")}
           </p>
 
           <div className="mt-5 grid grid-cols-2 gap-1 rounded-xl bg-ink/[0.05] p-1 text-sm font-medium">
@@ -140,7 +142,7 @@ function AuthDialog() {
                   view === v ? "bg-surface text-ink shadow-sm" : "text-ink/55 hover:text-ink",
                 )}
               >
-                {v === "login" ? "Giriş Yap" : "Kayıt Ol"}
+                {v === "login" ? t("auth.login") : t("auth.register")}
               </button>
             ))}
           </div>
@@ -154,31 +156,31 @@ function AuthDialog() {
             }}
           >
             {isRegister && (
-              <Field label="Ad Soyad" icon={User}>
+              <Field label={t("auth.name")} icon={User}>
                 <input
                   className={INPUT}
                   autoComplete="name"
-                  placeholder="Ayşe Yılmaz"
+                  placeholder={t("auth.namePh")}
                   maxLength={80}
                   value={form.name}
                   onChange={(e) => setForm((f) => ({ ...f, name: sanitizeInput(e.target.value, 80, { live: true }) }))}
                 />
               </Field>
             )}
-            <Field label="E-posta" icon={Mail}>
+            <Field label={t("auth.email")} icon={Mail}>
               <input
                 className={INPUT}
                 type="email"
                 inputMode="email"
                 autoComplete="email"
-                placeholder="ornek@mail.com"
+                placeholder={t("auth.emailPh")}
                 maxLength={254}
                 value={form.email}
                 onChange={(e) => setForm((f) => ({ ...f, email: sanitizeEmail(e.target.value) }))}
               />
             </Field>
             {isRegister && (
-              <Field label="Telefon (Opsiyonel)" icon={Phone}>
+              <Field label={t("auth.phone")} icon={Phone}>
                 <input
                   className={INPUT}
                   type="tel"
@@ -191,13 +193,13 @@ function AuthDialog() {
                 />
               </Field>
             )}
-            <Field label="Şifre" icon={Lock}>
+            <Field label={t("auth.password")} icon={Lock}>
               <div className="relative">
                 <input
                   className={cn(INPUT, "pr-10")}
                   type={showPassword ? "text" : "password"}
                   autoComplete={isRegister ? "new-password" : "current-password"}
-                  placeholder={isRegister ? "En az 8 karakter, harf + rakam" : "••••••••"}
+                  placeholder={isRegister ? t("auth.passwordPh") : "••••••••"}
                   maxLength={128}
                   value={form.password}
                   onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
@@ -205,7 +207,7 @@ function AuthDialog() {
                 <button
                   type="button"
                   onClick={() => setShowPassword((s) => !s)}
-                  aria-label={showPassword ? "Şifreyi gizle" : "Şifreyi göster"}
+                  aria-label={showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
                   className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-lg text-ink/45 hover:text-ink"
                 >
                   {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -225,12 +227,12 @@ function AuthDialog() {
               className="flex w-full items-center justify-center gap-2 rounded-xl glass-primary px-5 py-3 text-sm font-semibold disabled:opacity-70"
             >
               {busy && <Loader2 size={16} className="animate-spin" />}
-              {isRegister ? "Hesabımı Oluştur" : "Giriş Yap"}
+              {isRegister ? t("auth.submitRegister") : t("auth.login")}
             </button>
           </form>
 
           <p className="mt-4 flex items-center justify-center gap-1.5 text-[11px] text-ink/50">
-            <ShieldCheck size={12} className="text-emerald-500" /> Şifren scrypt + rastgele salt ile şifrelenir, düz metin saklanmaz.
+            <ShieldCheck size={12} className="text-emerald-500" /> {t("auth.hashNote")}
           </p>
 
           <div className="mt-4 border-t border-ink/10 pt-3 text-center">
@@ -239,7 +241,7 @@ function AuthDialog() {
               onClick={openAdmin}
               className="text-xs font-medium text-ink/45 transition-colors hover:text-ink"
             >
-              🛡️ Yönetici / Excel Tablosu
+              {t("account.admin")}
             </button>
           </div>
         </div>

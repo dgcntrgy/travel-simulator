@@ -9,7 +9,8 @@ type FlightType = "direct" | "layover";
 type PlaceCategory = "sight" | "food" | "culture";
 
 interface TripRoute { origin: Airport; destination: Airport } // Simulator → Adım 2–4 prop'u
-interface Airport { code: string; city: string; country: string; airportName: string; coordinates: LngLat; flag: string; utcOffset: number }
+interface Airport { code: string; city: string; country: string /* Türkçe ad */; airportName: string; coordinates: LngLat; flag: string; utcOffset: number;
+  countryCode?: string /* ISO */; cityCenter?: LngLat /* keşif/otel merkezi */; tier?: AirportTier /* 1 hub · 2 büyük · 3 bölgesel */ }
 interface Layover { airport: Airport; durationMinutes: number }
 interface Flight {
   id: string; airline: string; airlineCode: string; flightNumber: string; type: FlightType;
@@ -18,7 +19,7 @@ interface Flight {
   totalDurationMinutes: number; departureTime: string; arrivalTime: string; arrivalDayOffset: number;
   cabinBaggageKg: number; checkedBaggageKg: number; tags: string[]; campaign?: FlightCampaign; // varsa price = indirimli
 }
-interface FlightCampaign { originalPrice /* kişi başı indirimsiz */; discountPercent /* 12–22 */; seatsLeft /* 2–7 */ }
+interface FlightCampaign { originalPrice /* kişi başı piyasa ortalaması */; discountPercent /* ≥15 */; verifiedBy: "travelpayouts"|"amadeus" }  // yalnız canlı doğrulanmış fırsat
 type FlightPriceSource = "travelpayouts" | "amadeus" | "simulation";
 interface Place {
   id: string; name: string; wikiTitle: string;
@@ -47,7 +48,7 @@ interface AdminUserRow extends PublicUser { hashInfo /* "scrypt · N=16384 · sa
 
 ## src/store/useTripStore.ts
 ```ts
-export const STEPS: { id: Exclude<StepId, 0>; title: string; short: string }[]; // 1–4: Uçuş, Keşif, Konaklama, Rehber
+export const STEPS: { id: Exclude<StepId, 0>; title: TranslationKey; short: TranslationKey }[]; // "steps.1.title"… → t(s.title)
 
 interface TripState {
   currentStep: StepId;            // başlangıç 0 (Landing)
@@ -57,6 +58,8 @@ interface TripState {
   isAuthModalOpen: boolean; authView: "login" | "register";
   isAdminOpen: boolean;           // AdminPanel
   theme: Theme;                   // varsayılan "light"; reset() sıfırlamaz
+  locale: Locale;                 // tr|en|de|fr|ja|zh; açılış: ts_lang → navigator → en (sonra IP ülkesi); reset() sıfırlamaz
+  setLocale(l, persist = true): void;  // persist → ts_lang çerez + localStorage
   origin: Airport | null; destination: Airport | null;   // başlangıç null (kullanıcı seçer); reset() → null
   departureDate: string;          // "YYYY-MM-DD", varsayılan bugün+30
   travelers: number;              // 1–9
@@ -114,11 +117,29 @@ getPlacesForDestination(code: string): Place[]   // SADECE kürasyonlu (Record<F
 getRegions(places): string[]               // ilk görülme sırasıyla
 // @/data/mockFlights
 getFlights(origin, destination, date): Flight[]   // TR kalkışı + bantlı bölge → MARKET_BANDS içinde fiyat; <150 km → []; kürasyonlu şablon sadece TR kalkışında, aksi halde generateFlightTemplates
-// @/lib/flightCampaigns
-applyCampaigns(flights, departureDate, today?): Flight[]   // 1 uçuşa (en ucuz hariç) kampanya; deterministik rota+tarih+gün
-verificationLinks(originCode, destCode, date, passengers): { google; skyscanner }
+// @/lib/flightCampaigns  (applyCampaigns SİLİNDİ — yapay kampanya yok)
+DEAL_THRESHOLD = 0.15
+detectDeal(livePrice, marketAverage, source, isDeal?): FlightCampaign | null   // simülasyonda null
+applyVerifiedDeal(flights, deal, livePrice, airlineCode?): Flight[]
+verificationLinks(originCode, destCode, date, passengers, hl = "tr"): { google; skyscanner (skyscanner.net) }
 // @/lib/server/liveFlights (sunucu)
-getLiveFlights(originCode, destCode, date): Promise<{ flights; source: FlightPriceSource; liveMinPrice: number|null; fetchedAt }>   // use cache + cacheLife("hours")
+getLiveFlights(originCode, destCode, date): Promise<{ flights; source; liveMinPrice; marketAverage: number|null; fetchedAt }>   // use cache + cacheLife("hours")
+// @/data/worldAirports
+COUNTRIES: Record<ISO, CountryInfo { name; utc; continent; language: LanguageCode; costIndex; carrier?; lowCost? }>; COUNTRY_ISO_BY_NAME; flagOf(iso); CITY_EN; WORLD_AIRPORTS (385)
+// @/data/airports (ek)
+ALL_AIRPORTS: Airport[] (popüler önce); findAirport(code): Airport | undefined; AIRPORTS = kürasyonlu + dünya alanları
+// @/lib/globalRouteEngine
+haversineKm(a, b); estimateFlightMinutes(km); routeInfo(o, d): { distanceKm; directMinutes; timeDiffHours }
+countryOf(a); profileForAirport(a): DestinationProfile; nearestAirport([lng,lat]): { airport; distanceKm }
+interface FlightTemplate { airline; airlineCode; flightNumber; hub?: string; layoverMinutes?; basePrice; departure; cabinBaggageKg; checkedBaggageKg; tags }
+generateFlightTemplates(origin, destination)   // ≥150 km her çiftte en az 1 seçenek
+// @/lib/i18n (sunucu-güvenli)
+LOCALES; type Locale; LOCALE_META; isLocale; localeForCountry(cc); localeFromLanguages(tags); type TranslationKey
+translate(locale, key, vars?); translateTag(locale, tag); formatDurationLocale(locale, min); formatTimeDiff(locale, h); countryName(a, locale); cityName(a, locale)
+// @/lib/useI18n  →  useT(): T = ((key, vars?) => string) & { locale }
+// @/lib/prefs  →  PREF { locale: "ts_lang"; consent: "ts_consent"; origin: "ts_origin" }; readPref; writePref; readConsent(): "all"|"essential"|null
+// @/lib/geoClient  →  fetchGeo(); locateAndSetOrigin(): Promise<{ airport; place } | null>; useGeoBootstrap()
+// API: GET /api/geo → GeoResponse { country; city; lat; lng; locale; source: "vercel"|"ipapi"|"none" }
 formatDuration(min): string
 // @/data/mockHotels
 HOTEL_TIER_META: Record<HotelTier, { label; short }>   // Bütçe Dostu / Fiyat/Performans Merkez / Lüks
@@ -152,11 +173,9 @@ type Continent = "Avrupa"|"Asya"|"Orta Doğu"|"Afrika"|"Amerika"|"Okyanusya"; CO
 interface CityInfo { name /* = cityRegion */; coordinates: LngLat }
 interface DestinationProfile { continent; cities: CityInfo[] /* ilki varış şehri */; costIndex /* 1 = B. Avrupa */; language: LanguageCode }
 DESTINATION_PROFILES: Record<string, DestinationProfile>   // 36 hedefin hepsi
-getDestinationProfile(airport): DestinationProfile          // yoksa varış şehrinden tek şehirli
+getDestinationProfile(airport): DestinationProfile          // yoksa globalRouteEngine.profileForAirport (şehir merkezi, ülke dili/maliyeti)
 isCuratedDestination(code): boolean; searchKey(text); matchesDestination(airport, query): boolean
 interface LanguagePack { name; hello; thanks; takeMe; bill; howMuch; rtl? }; LANGUAGES: Record<LanguageCode, LanguagePack>
-interface FlightTemplate { airline; airlineCode; flightNumber; hub?: AirportCode; layoverMinutes?; basePrice /* kürasyonlu: IST çıkışlı g-d; jeneratör: gerçek kalkış */; departure; cabinBaggageKg; checkedBaggageKg; tags }
-generateFlightTemplates(origin, destination): FlightTemplate[]
 generateHotels(city, center: LngLat, places, costIndex): Hotel[]   // 3 tier, nights 0
 discoverLivePlaces(destination): Promise<Place[]>   // önbellekli, hata fırlatabilir
 peekLivePlaces(code): Place[] | null
