@@ -186,7 +186,7 @@ body {
 /* Karanlık tema: OpenStreetMap karoları yumuşak gece lacivertine (Soft Slate Navy) kalibre edilir (siyah/yeşil ton yok).
    Sadece karo panosu filtrelenir; pinler, rotalar ve rozetler orijinal renklerinde kalır. */
 .dark .leaflet-tile-pane {
-  filter: invert(100%) hue-rotate(190deg) saturate(140%) brightness(88%) contrast(85%);
+  filter: invert(100%) hue-rotate(190deg) saturate(140%) brightness(88%) contrast(85%) !important;
 }
 /* divIcon sarmalayıcısı: Leaflet'in varsayılan beyaz kutusu yok, içerik taşabilir */
 .map-divicon {

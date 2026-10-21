@@ -25,9 +25,9 @@ import type { Airport, Flight, Hotel, LngLat, Place, PlaceCategory, Theme, Trans
  * Karanlık temada `.leaflet-tile-pane` elemanına doğrudan `DARK_TILE_FILTER` uygulanır
  * (pinler/çizgiler filtrelenmez). Leaflet Web Worker kullanmaz → Turbopack'te "Worker failed to load" sorunu yok.
  */
-const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png?v=2";
 const TILE_ATTRIBUTION =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> katkıcıları';
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
 
 /** Yumuşak gece laciverti (Soft Slate Navy): OSM karoları ters çevrilip laciverte kaydırılır; globals.css ile aynı değer */
 const DARK_TILE_FILTER = "invert(100%) hue-rotate(190deg) saturate(140%) brightness(88%) contrast(85%)";

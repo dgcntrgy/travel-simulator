@@ -10,9 +10,9 @@ import { cn } from "@/lib/cn";
 import type { Place } from "@/types/trip";
 
 /** WorldMap ile aynı ücretsiz OSM katmanı; karanlık temada karo panosuna doğrudan CSS filtresi uygulanır */
-const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png?v=2";
 const TILE_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
-const DARK_TILE_FILTER = "invert(100%) hue-rotate(200deg) saturate(170%) brightness(88%) contrast(105%)";
+const DARK_TILE_FILTER = "invert(100%) hue-rotate(190deg) saturate(140%) brightness(88%) contrast(85%)";
 
 /**
  * Detay penceresi için tek pinli küçük konum haritası.
