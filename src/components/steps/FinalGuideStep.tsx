@@ -49,7 +49,7 @@ import {
 } from "@/lib/routeOptimizer";
 import { fetchLocalTitles, fetchWikiImage } from "@/lib/wikipedia";
 import { useT } from "@/lib/useI18n";
-import { computeBudget, useTripStore } from "@/store/useTripStore";
+import { computeBudget, hotelNightlyFor, hotelTotalFor, roomsFor, useTripStore } from "@/store/useTripStore";
 import { cn } from "@/lib/cn";
 import type { Airport, Flight, Hotel, IntercityTransfer, Place, TransitLeg, TripRoute } from "@/types/trip";
 import { STEP_TRANSITION } from "@/lib/motion";
@@ -155,10 +155,7 @@ function GuideHero({
 
       <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600 dark:text-blue-400">
-            Adım 4 · Kişisel Tur Rehberi & Bütçe Özeti
-          </p>
-          <h1 className="mt-2 text-3xl font-bold text-ink md:text-4xl">
+          <h1 className="text-3xl font-bold text-ink md:text-4xl">
             <span className="mr-2">{destination.flag}</span>
             {destination.country} Rehberin
           </h1>
@@ -276,8 +273,8 @@ function useBudgetCategories(plan: TripPlan): { categories: BudgetCategory[]; to
         amount: budget.hotel,
         lines: hotels.map((h) => ({
           label: `${h.name} (${h.cityRegion})`,
-          detail: `${h.nights} gece × ${usd(h.pricePerNight)} · oda`,
-          amount: h.pricePerNight * h.nights,
+          detail: `${h.nights} gece × ${usd(hotelNightlyFor(h, travelers))} · ${roomsFor(travelers)} oda`,
+          amount: hotelTotalFor(h, travelers),
         })),
       },
       {
@@ -466,6 +463,7 @@ function FlightSummary({ flight }: { flight: Flight | null }) {
 
 function HotelsSummary({ plan }: { plan: TripPlan }) {
   const recommendedHotels = useTripStore((s) => s.recommendedHotels);
+  const travelers = useTripStore((s) => s.travelers);
   return (
     <section className="card print-break-avoid rounded-3xl p-5">
       <SectionTitle icon={BedDouble}>Konaklama</SectionTitle>
@@ -493,7 +491,7 @@ function HotelsSummary({ plan }: { plan: TripPlan }) {
               </div>
               <div className="text-right font-mono text-xs tabular-nums">
                 <p className="font-semibold text-ink">{c.nights} gece</p>
-                <p className="text-ink/50">{usd(hotel.pricePerNight)}/gece</p>
+                <p className="text-ink/50">{usd(hotelNightlyFor(hotel, travelers))}/gece</p>
               </div>
             </div>
           );
@@ -862,7 +860,7 @@ function BookingLinks({
                     <div className="min-w-0 flex-1 leading-tight">
                       <p className="truncate text-sm font-medium text-ink">{hotel.name}</p>
                       <p className="truncate text-[11px] text-ink/50">
-                        {c.city} · {c.nights} gece × {usd(hotel.pricePerNight)}
+                        {c.city} · {c.nights} gece × {usd(hotelNightlyFor(hotel, travelers))}
                         {checkin && ` · giriş ${formatDate(checkin, { day: "numeric", month: "short" })}`}
                       </p>
                     </div>
@@ -877,7 +875,6 @@ function BookingLinks({
                 );
               })}
             </div>
-            <p className="mt-2 text-[11px] text-ink/45">Booking.com&apos;da tarih ve kişi sayısı önceden doldurulur.</p>
           </div>
         </div>
       </div>
@@ -922,7 +919,7 @@ interface ItemVisual {
   subtitle?: string;
 }
 
-function itemVisual(item: ItineraryItem, destination: Airport, origin: Airport): ItemVisual {
+function itemVisual(item: ItineraryItem, destination: Airport, origin: Airport, travelers: number): ItemVisual {
   switch (item.kind) {
     case "arrival":
       return {
@@ -938,7 +935,7 @@ function itemVisual(item: ItineraryItem, destination: Airport, origin: Airport):
         color: "#6366f1",
         kicker: "Otele yerleşme",
         title: item.hotel.name,
-        subtitle: `${item.hotel.area} · ${usd(item.hotel.pricePerNight)}/gece`,
+        subtitle: `${item.hotel.area} · ${usd(hotelNightlyFor(item.hotel, travelers))}/gece`,
       };
     case "transfer":
       return {
@@ -1144,7 +1141,8 @@ function SlotCard({
   onOpen: () => void;
 }) {
   const isPro = useTripStore((s) => s.isPro);
-  const v = itemVisual(item, destination, origin);
+  const travelers = useTripStore((s) => s.travelers);
+  const v = itemVisual(item, destination, origin, travelers);
   const Icon = v.icon;
 
   let footer: React.ReactNode = null;
@@ -1221,6 +1219,7 @@ function ItemDetailModal({
   onClose: () => void;
 }) {
   const isPro = useTripStore((s) => s.isPro);
+  const travelers = useTripStore((s) => s.travelers);
 
   useEffect(() => {
     if (!item) return;
@@ -1229,7 +1228,7 @@ function ItemDetailModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [item, onClose]);
 
-  const v = item ? itemVisual(item, destination, origin) : null;
+  const v = item ? itemVisual(item, destination, origin, travelers) : null;
 
   let body: React.ReactNode = null;
   if (item) {
@@ -1297,7 +1296,7 @@ function ItemDetailModal({
         body = (
           <p className="text-sm leading-relaxed text-ink/75">
             {item.hotel.name} · {item.hotel.area}. {HOTEL_TIER_META[item.hotel.tier].label} · ⭐ {item.hotel.rating}/10 ·{" "}
-            {usd(item.hotel.pricePerNight)}/gece. {item.hotel.highlights.join(" · ")}
+            {usd(hotelNightlyFor(item.hotel, travelers))}/gece. {item.hotel.highlights.join(" · ")}
           </p>
         );
         break;

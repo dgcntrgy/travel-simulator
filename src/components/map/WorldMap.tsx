@@ -16,22 +16,24 @@ import {
   formatFrequency,
   formatMinutes,
 } from "@/lib/routeOptimizer";
-import { useTripStore } from "@/store/useTripStore";
+import { hotelNightlyFor, useTripStore } from "@/store/useTripStore";
 import { cn } from "@/lib/cn";
 import type { Airport, Flight, Hotel, LngLat, Place, PlaceCategory, Theme, TransitLeg, TransitRoute } from "@/types/trip";
 
 /**
- * Resmi OpenStreetMap raster karoları: API anahtarı, üyelik veya ücret yok.
- * Tek katman iki temada da kullanılır; karanlık temada `.leaflet-tile-pane` elemanına doğrudan
- * `DARK_TILE_FILTER` uygulanır (ayrı sunucu yok, pinler/çizgiler filtrelenmez).
+ * Gündüz: resmi OpenStreetMap raster karoları · Gece: CartoDB Positron (sade, açık zeminli) karoları.
+ * İkisi de API anahtarsız ve ücretsiz. Karanlık temada `.leaflet-tile-pane` elemanına doğrudan
+ * `DARK_TILE_FILTER` uygulanır (pinler/çizgiler filtrelenmez).
  * Leaflet Web Worker kullanmaz → Turbopack'te "Worker failed to load" sorunu yok.
  */
 const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const DARK_TILE_URL = "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
 const TILE_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> katkıcıları';
+const DARK_TILE_ATTRIBUTION = `${TILE_ATTRIBUTION} &copy; <a href="https://carto.com/attributions">CARTO</a>`;
 
-/** Gece laciverti: derin lacivert su + koyu mavi kara parçaları */
-const DARK_TILE_FILTER = "invert(100%) hue-rotate(200deg) saturate(170%) brightness(88%) contrast(105%)";
+/** Yumuşak gece laciverti: Positron ters çevrilir → deniz #0D162B, kara #172544, sınırlar açık mavi-gri */
+const DARK_TILE_FILTER = "invert(92%) hue-rotate(195deg) saturate(160%) brightness(92%) contrast(88%)";
 
 /** Yükleme kaplaması en geç bu süre sonunda kalkar (karolar arka planda yüklenmeye devam eder). */
 const OVERLAY_MAX_MS = 1000;
@@ -174,13 +176,13 @@ const BED_ICON = svg(
   '<path d="M2 20v-8a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v8"/><path d="M4 10V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v4"/><path d="M12 4v6"/><path d="M2 18h20"/>',
 );
 
-function hotelPin(hotel: Hotel, state: "focused" | "chosen" | "option"): HTMLDivElement {
+function hotelPin(hotel: Hotel, state: "focused" | "chosen" | "option", travelers: number): HTMLDivElement {
   const pin = el(
     `hotel-pin hotel-pin--${hotel.tier} is-${state}`,
     `${RADAR_RINGS}
      <span class="hotel-pin__halo"></span>
      <span class="hotel-pin__body">${BED_ICON}</span>
-     <span class="hotel-pin__label">${escapeHtml(hotel.name)}<small>$${hotel.pricePerNight} / gece</small></span>`,
+     <span class="hotel-pin__label">${escapeHtml(hotel.name)}<small>$${hotelNightlyFor(hotel, travelers)} / gece</small></span>`,
   );
   pin.setAttribute("role", "button");
   pin.setAttribute("aria-label", hotel.name);
@@ -278,10 +280,13 @@ export default function WorldMap({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
+  const tilesRef = useRef<L.TileLayer | null>(null);
+  const attributionRef = useRef<L.Control.Attribution | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [overlayVisible, setOverlayVisible] = useState(true);
 
   const theme = useTripStore((s) => s.theme);
+  const travelers = useTripStore((s) => s.travelers);
   const origin = useTripStore((s) => s.origin);
   const destination = useTripStore((s) => s.destination);
   const selectedFlight = useTripStore((s) => s.selectedFlight);
@@ -329,10 +334,11 @@ export default function WorldMap({
       attributionControl: false,
     });
     L.control.zoom({ position: "bottomright" }).addTo(map);
-    L.control.attribution({ position: "bottomleft", prefix: false }).addTo(map);
+    attributionRef.current = L.control.attribution({ position: "bottomleft", prefix: false }).addTo(map);
 
-    const tiles = L.tileLayer(TILE_URL, {
-      attribution: TILE_ATTRIBUTION,
+    const dark = useTripStore.getState().theme === "dark";
+    const tiles = L.tileLayer(dark ? DARK_TILE_URL : TILE_URL, {
+      attribution: dark ? DARK_TILE_ATTRIBUTION : TILE_ATTRIBUTION,
       maxZoom: MAX_ZOOM,
       minZoom: MIN_ZOOM,
       noWrap: true,
@@ -344,6 +350,7 @@ export default function WorldMap({
       updateWhenIdle: false,
     }).addTo(map);
     tiles.once("load", () => setOverlayVisible(false));
+    tilesRef.current = tiles;
 
     mapRef.current = map;
     setMapReady(true);
@@ -359,17 +366,30 @@ export default function WorldMap({
       resize.disconnect();
       map.remove();
       mapRef.current = null;
+      tilesRef.current = null;
       setMapReady(false);
     };
     // Harita sadece mount'ta kurulur; hedef değişimleri (tema: CSS filtresi) aşağıdaki effect'lerde işlenir
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
-  // Karanlık tema: sadece karo panosu ters çevrilir (pinler, çizgiler, rozetler orijinal renginde kalır)
+  // Karanlık tema: Positron karolarına geçilir ve sadece karo panosu filtrelenir (pinler, çizgiler, rozetler orijinal renginde kalır)
   useEffect(() => {
+    const tiles = tilesRef.current;
+    const dark = theme === "dark";
+    if (tiles) {
+      const url = dark ? DARK_TILE_URL : TILE_URL;
+      if ((tiles as unknown as { _url: string })._url !== url) {
+        // Katman attribution'ı eklenirken okunur → kontrolde elle değiştirilir
+        attributionRef.current?.removeAttribution(dark ? TILE_ATTRIBUTION : DARK_TILE_ATTRIBUTION);
+        attributionRef.current?.addAttribution(dark ? DARK_TILE_ATTRIBUTION : TILE_ATTRIBUTION);
+        tiles.options.attribution = dark ? DARK_TILE_ATTRIBUTION : TILE_ATTRIBUTION;
+        tiles.setUrl(url);
+      }
+    }
     const tilePane = containerRef.current?.querySelector<HTMLElement>(".leaflet-tile-pane");
     if (!tilePane) return;
-    tilePane.style.filter = theme === "dark" ? DARK_TILE_FILTER : "none";
+    tilePane.style.filter = dark ? DARK_TILE_FILTER : "none";
   }, [theme, mapReady]);
 
   // 2) Adım 1: rota, pinler ve kamera
@@ -850,7 +870,7 @@ export default function WorldMap({
         const state = city === activeCity && isChosen ? "focused" : isChosen ? "chosen" : "option";
         const marker = add(
           L.marker(toLatLng(hotel.coordinates), {
-            icon: htmlIcon(hotelPin(hotel, state), state === "focused" ? 40 : 28),
+            icon: htmlIcon(hotelPin(hotel, state, travelers), state === "focused" ? 40 : 28),
             title: hotel.name,
             zIndexOffset: state === "focused" ? 900 : 600,
           }),
@@ -869,10 +889,10 @@ export default function WorldMap({
     }
 
     return () => layers.forEach((l) => l.remove());
-  }, [mapReady, mode, theme, isPro, plan, focusedHotelId, recommendedHotels, chooseHotel]);
+  }, [mapReady, mode, theme, isPro, plan, focusedHotelId, recommendedHotels, chooseHotel, travelers]);
 
   return (
-    <div className={cn("relative overflow-hidden bg-[#e2e8f0] dark:bg-[#080C16] print:hidden", className)}>
+    <div className={cn("relative overflow-hidden bg-[#e2e8f0] dark:bg-[#0D162B] print:hidden", className)}>
       <div ref={containerRef} className="absolute inset-0 z-0" />
       {mode === "hotel" && !isPro && (
         <button

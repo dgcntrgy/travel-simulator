@@ -127,12 +127,34 @@ const initialData = (): TripData => ({
   transitCost: 0,
 });
 
+/** Oda sayısı: standart oda en fazla 2 kişilik. */
+export function roomsFor(travelers: number): number {
+  return Math.max(1, Math.ceil(travelers / 2));
+}
+
+/** Otel fiyat çarpanı: 1 kişi 1.0x · 2 kişi 1.35x (çift kişilik) · 3 kişi 2.0x (2 oda) · 4 kişi 2.6x; sonrası kişi başı +0.65x. */
+const HOTEL_MULTIPLIERS = [1, 1.35, 2, 2.6];
+export function hotelPriceMultiplier(travelers: number): number {
+  const n = Math.max(1, travelers);
+  return n <= HOTEL_MULTIPLIERS.length ? HOTEL_MULTIPLIERS[n - 1] : 2.6 + (n - 4) * 0.65;
+}
+
+/** Yolcu sayısına göre gecelik toplam otel fiyatı (tüm odalar). */
+export function hotelNightlyFor(hotel: Pick<Hotel, "pricePerNight">, travelers: number): number {
+  return Math.round(hotel.pricePerNight * hotelPriceMultiplier(travelers));
+}
+
+/** Yolcu sayısına göre otelin toplam konaklama tutarı. */
+export function hotelTotalFor(hotel: Pick<Hotel, "pricePerNight" | "nights">, travelers: number): number {
+  return hotelNightlyFor(hotel, travelers) * hotel.nights;
+}
+
 /** Bileşenlerde `useTripStore(useShallow(computeBudget))` ile reaktif okunabilir. */
 export function computeBudget(
   state: Pick<TripState, "selectedFlight" | "recommendedHotels" | "selectedPlaces" | "transitCost" | "travelers">,
 ): BudgetBreakdown {
   const flight = (state.selectedFlight?.price ?? 0) * state.travelers;
-  const hotel = state.recommendedHotels.reduce((sum, h) => sum + h.pricePerNight * h.nights, 0);
+  const hotel = state.recommendedHotels.reduce((sum, h) => sum + hotelTotalFor(h, state.travelers), 0);
   const transit = state.transitCost * state.travelers;
   const foodAndEntries = state.selectedPlaces.reduce((sum, p) => sum + p.estimatedCost, 0) * state.travelers;
 

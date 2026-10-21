@@ -7,12 +7,9 @@ import {
   BedDouble,
   Compass,
   Crown,
-  MapPinned,
   Plane,
   PlaneLanding,
   PlaneTakeoff,
-  Route,
-  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import { AIRPORTS, ALL_AIRPORTS, FEATURED_DESTINATIONS } from "@/data/airports";
@@ -30,12 +27,6 @@ const HOW_IT_WORKS: { icon: LucideIcon; title: TranslationKey; text: Translation
   { icon: Plane, title: "landing.how1Title", text: "landing.how1Text" },
   { icon: Compass, title: "landing.how2Title", text: "landing.how2Text" },
   { icon: BedDouble, title: "landing.how3Title", text: "landing.how3Text" },
-];
-
-const HIGHLIGHTS: { icon: LucideIcon; label: TranslationKey }[] = [
-  { icon: Route, label: "landing.hl1" },
-  { icon: MapPinned, label: "landing.hl2" },
-  { icon: Wallet, label: "landing.hl3" },
 ];
 
 /** Bento ızgarasında ilk kart büyük (2×2), diğerleri tek hücre */
@@ -170,25 +161,9 @@ export default function LandingStep() {
             <span className="text-blue-600 dark:text-blue-400">{t("landing.heroEm")}</span>
             {t("landing.heroB")}
           </motion.h1>
-          <motion.p
-            variants={RISE_ITEM}
-            className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-ink/60 md:text-lg"
-          >
-            {t("landing.heroText")}
-          </motion.p>
 
           <motion.div variants={RISE_ITEM} className="relative z-50 mt-9">
             <QuickRouteBar />
-          </motion.div>
-          <motion.div
-            variants={RISE_ITEM}
-            className="mt-5 flex flex-wrap justify-center gap-x-5 gap-y-2 text-sm text-ink/55"
-          >
-            {HIGHLIGHTS.map(({ icon: Icon, label }) => (
-              <span key={label} className="inline-flex items-center gap-1.5">
-                <Icon size={14} className="text-blue-600 dark:text-blue-400" /> {t(label)}
-              </span>
-            ))}
           </motion.div>
         </div>
       </motion.section>
@@ -202,9 +177,6 @@ export default function LandingStep() {
             </p>
             <h2 className="mt-2 text-2xl font-bold text-ink md:text-3xl">{t("landing.popularTitle")}</h2>
           </div>
-          <p className="text-sm text-ink/55">
-            {t("landing.popularText", { n: ALL_AIRPORTS.length })}
-          </p>
         </div>
         <motion.div
           variants={STAGGER_PARENT}

@@ -95,7 +95,12 @@ interface TripState {
 // Reaktif okuma: useTripStore(useShallow(computeBudget))
 export function computeBudget(s): BudgetBreakdown;
 //  flight = selectedFlight.price * travelers
-//  hotel = Σ pricePerNight * nights
+//  hotel = Σ hotelTotalFor(h, travelers)   // pricePerNight ham 1 kişilik fiyat
+// Otel çarpanı yardımcıları (aynı dosya):
+roomsFor(travelers): number                 // ceil(n/2), min 1
+hotelPriceMultiplier(travelers): number     // 1→1.0 · 2→1.35 · 3→2.0 · 4→2.6 · sonrası +0.65/kişi
+hotelNightlyFor(hotel, travelers): number   // Math.round(pricePerNight * çarpan) — tüm UI gecelik fiyatı bunu gösterir
+hotelTotalFor(hotel, travelers): number     // hotelNightlyFor * nights
 //  transit = transitCost * travelers
 //  foodAndEntries = Σ place.estimatedCost * travelers
 ```

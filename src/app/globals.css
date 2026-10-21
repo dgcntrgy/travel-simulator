@@ -173,7 +173,7 @@ body {
   font-family: inherit;
 }
 .dark .leaflet-container {
-  background: #080c16 !important;
+  background: #0d162b !important;
 }
 .leaflet-tile-pane,
 .leaflet-tile-container {
@@ -183,10 +183,10 @@ body {
   background: transparent !important;
   transition: opacity 0.2s ease-out;
 }
-/* Karanlık tema: tek OpenStreetMap katmanı CSS filtresiyle karartılır (ayrı karo sunucusu yok).
+/* Karanlık tema: CartoDB Positron karoları yumuşak gece lacivertine kalibre edilir (siyah/yeşil ton yok).
    Sadece karo panosu filtrelenir; pinler, rotalar ve rozetler orijinal renklerinde kalır. */
 .dark .leaflet-tile-pane {
-  filter: invert(100%) hue-rotate(200deg) saturate(170%) brightness(88%) contrast(105%);
+  filter: invert(92%) hue-rotate(195deg) saturate(160%) brightness(92%) contrast(88%);
 }
 /* divIcon sarmalayıcısı: Leaflet'in varsayılan beyaz kutusu yok, içerik taşabilir */
 .map-divicon {

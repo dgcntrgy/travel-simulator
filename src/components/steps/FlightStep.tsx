@@ -27,12 +27,10 @@ import { getFlights } from "@/data/mockFlights";
 import { verificationLinks } from "@/lib/flightCampaigns";
 import CitySelectDropdown from "@/components/ui/CitySelectDropdown";
 import { getDestinationProfile, matchesDestination } from "@/lib/globalDiscovery";
-import { routeInfo } from "@/lib/globalRouteEngine";
 import {
   cityName,
   countryName,
   formatDurationLocale,
-  formatTimeDiff,
   translateTag,
   type Locale,
   type TranslationKey,
@@ -451,14 +449,11 @@ const destinationSubtitle = (d: Airport, locale: Locale) =>
   ].join(" · ");
 
 /** Numaralı seçim bölümü başlığı ("1 · Nereden kalkıyorsun?") */
-function PickerHeading({ index, icon: Icon, title, hint, tone }: {
-  index: number;
+function PickerHeading({ icon: Icon, title, tone }: {
   icon: typeof PlaneTakeoff;
   title: string;
-  hint: string;
   tone: "violet" | "cyan";
 }) {
-  const t = useT();
   return (
     <div className="mb-3 flex items-center gap-3">
       <span
@@ -471,11 +466,7 @@ function PickerHeading({ index, icon: Icon, title, hint, tone }: {
       >
         <Icon size={17} />
       </span>
-      <div className="leading-tight">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink/45">{t("flight.sub", { n: index })}</p>
-        <h2 className="text-lg font-bold text-ink">{title}</h2>
-      </div>
-      <p className="ml-auto hidden text-right text-[11px] text-ink/45 sm:block">{hint}</p>
+      <h2 className="text-lg font-bold leading-tight text-ink">{title}</h2>
     </div>
   );
 }
@@ -523,7 +514,6 @@ export default function FlightStep() {
     () => (origin && destination ? getFlights(origin, destination, departureDate) : []),
     [origin, destination, departureDate],
   );
-  const info = useMemo(() => (origin && destination ? routeInfo(origin, destination) : null), [origin, destination]);
   const [live, setLive] = useState<{ key: string; flights: Flight[]; source: FlightPriceSource } | null>(null);
   useEffect(() => {
     if (!origin || !destination) return;
@@ -585,20 +575,14 @@ export default function FlightStep() {
         <div className="lg:flex-1 lg:overflow-y-auto">
           <div className="mx-auto max-w-2xl space-y-7 px-4 py-6 md:px-8 md:py-8">
             <header>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600 dark:text-blue-300">
-                {t("flight.eyebrow")}
-              </p>
-              <h1 className="mt-1 text-2xl font-bold text-ink md:text-3xl">{t("flight.title")}</h1>
-              <p className="mt-1.5 text-sm text-ink/60">{t("flight.text")}</p>
+              <h1 className="text-2xl font-bold text-ink md:text-3xl">{t("flight.title")}</h1>
             </header>
 
             {/* 1.1 Kalkış */}
             <div>
               <PickerHeading
-                index={1}
                 icon={PlaneTakeoff}
                 title={t("flight.fromTitle")}
-                hint={t("flight.fromHint", { n: ALL_AIRPORTS.length })}
                 tone="violet"
               />
               <div className="card rounded-2xl p-1">
@@ -620,10 +604,8 @@ export default function FlightStep() {
               <div className="flex items-start gap-2">
                 <div className="min-w-0 flex-1">
                   <PickerHeading
-                    index={2}
                     icon={PlaneLanding}
                     title={t("flight.toTitle")}
-                    hint={t("flight.toHint", { n: ALL_AIRPORTS.length })}
                     tone="cyan"
                   />
                 </div>
@@ -715,23 +697,9 @@ export default function FlightStep() {
                         layover: flights.length - directCount,
                       })}
                     </span>
-                    <span
-                      className={cn(
-                        "ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                        priceSource === "simulation"
-                          ? "bg-ink/[0.06] text-ink/55"
-                          : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-200",
-                      )}
-                    >
-                      {t(SOURCE_LABEL[priceSource])}
-                    </span>
-                    {info && (
-                      <span className="mt-1 block text-[11px] font-normal text-ink/45">
-                        {t("flight.routeInfo", {
-                          km: info.distanceKm.toLocaleString("en-US"),
-                          dur: formatDurationLocale(t.locale, info.directMinutes),
-                          tz: formatTimeDiff(t.locale, info.timeDiffHours),
-                        })}
+                    {priceSource !== "simulation" && (
+                      <span className="ml-2 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-200">
+                        {t(SOURCE_LABEL[priceSource])}
                       </span>
                     )}
                   </p>

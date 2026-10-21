@@ -24,7 +24,6 @@ import {
 } from "lucide-react";
 import WorldMap from "@/components/map/WorldMap";
 import { HOTEL_TIER_META } from "@/data/mockHotels";
-import { HOURS_PER_DAY } from "@/data/mockPlaces";
 import {
   TRANSIT_MODE_META,
   buildTripPlan,
@@ -36,7 +35,7 @@ import {
   type TripPlan,
 } from "@/lib/routeOptimizer";
 import { useT } from "@/lib/useI18n";
-import { useTripStore } from "@/store/useTripStore";
+import { hotelNightlyFor, hotelTotalFor, roomsFor, useTripStore } from "@/store/useTripStore";
 import { cn } from "@/lib/cn";
 import type { Hotel, HotelTier, IntercityTransfer, TransitMode, TripRoute } from "@/types/trip";
 import { CARD_HOVER, GLASS_CARD, PHOTO_ZOOM, riseIn, SLIDE_FROM_LEFT, SLIDE_FROM_RIGHT, STEP_TRANSITION } from "@/lib/motion";
@@ -135,10 +134,6 @@ function PlanSummaryBanner({ plan }: { plan: TripPlan }) {
               </span>
             ))}
           </div>
-          <p className="text-[11px] text-ink/50">
-            Gün hesabı: gezi süreleri + mekan başı ~45 dk ulaşım payı (günde {HOURS_PER_DAY} saat); ilk şehre varış/jet-lag günü eklendi.
-            {plan.cities.length > 1 && " Dönüş uçuşu için son şehirden varış şehrine geri dönüş bütçeye dahil."}
-          </p>
         </div>
       </div>
     </div>
@@ -171,7 +166,10 @@ function HotelCard({
   index: number;
 }) {
   const { hotel, score, avgDistanceKm } = evaluation;
-  const total = hotel.pricePerNight * hotel.nights;
+  const travelers = useTripStore((s) => s.travelers);
+  const rooms = roomsFor(travelers);
+  const nightly = hotelNightlyFor(hotel, travelers);
+  const total = nightly * hotel.nights;
 
   return (
     <motion.button
@@ -233,12 +231,17 @@ function HotelCard({
 
         <div className="mt-auto flex items-end justify-between border-t border-ink/10 pt-3">
           <div>
+            {travelers > 1 && (
+              <p className="text-[11px] font-semibold text-ink/60">
+                {travelers} Yetişkin ({rooms} Oda) • Gecelik Toplam {usd(nightly)}
+              </p>
+            )}
             <p className="font-mono text-lg font-bold tabular-nums text-ink">
-              {usd(hotel.pricePerNight)}
+              {usd(nightly)}
               <span className="text-xs font-normal text-ink/50"> / gece</span>
             </p>
             <p className="flex items-center gap-1 text-[11px] text-ink/55">
-              <Moon size={10} /> {hotel.nights} gece toplam
+              <Moon size={10} /> {hotel.nights} Gece Toplamı: {usd(total)}
             </p>
           </div>
           <p className="font-mono text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-300">{usd(total)}</p>
@@ -264,9 +267,6 @@ function TransitBreakdown({ plan, city, evaluation }: { plan: TripPlan; city: Ci
             <TrainFrontTunnel size={17} className="text-indigo-600 dark:text-indigo-300" />
             Nokta Atışı Metro/Tren Hatları & Görünmez Ulaşım Maliyetleri
           </h2>
-          <p className="mt-0.5 text-xs text-ink/55">
-            {evaluation.hotel.name} → {city.city} mekanları · tek yön, kişi başı
-          </p>
         </div>
         {isPro && (
           <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-1 text-[11px] font-semibold text-amber-700 dark:text-amber-200">
@@ -372,7 +372,8 @@ function HotelActionBar({ plan }: { plan: TripPlan }) {
   const nextStep = useTripStore((s) => s.nextStep);
   const recommendedHotels = useTripStore((s) => s.recommendedHotels);
   const ready = plan.cities.length > 0 && recommendedHotels.length === plan.cities.length;
-  const hotelTotal = recommendedHotels.reduce((s, h) => s + h.pricePerNight * h.nights, 0);
+  const travelers = useTripStore((s) => s.travelers);
+  const hotelTotal = recommendedHotels.reduce((s, h) => s + hotelTotalFor(h, travelers), 0);
 
   return (
     <div className="sticky bottom-0 z-20 flex items-center gap-3 border-t border-ink/10 bg-surface/90 px-4 py-3 backdrop-blur lg:static lg:bg-surface/80 md:px-8">
@@ -457,15 +458,9 @@ export default function HotelTransitStep({ destination }: TripRoute) {
         <div className="lg:flex-1 lg:overflow-y-auto">
           <div className="space-y-6 px-4 py-6 md:px-8 md:py-8">
             <header>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600 dark:text-blue-300">
-                Adım 3 · Akıllı Konaklama & Taşıt Simülasyonu
-              </p>
-              <h1 className="mt-1 text-2xl font-bold text-ink md:text-3xl">
+              <h1 className="text-2xl font-bold text-ink md:text-3xl">
                 {destination.flag} Rotana göre en ideal otel bölgesi
               </h1>
-              <p className="mt-1.5 text-sm text-ink/60">
-                Mekanlarının ağırlık merkezini hesapladık; her otel bu merkeze ve mekanlarına uzaklığına göre puanlandı.
-              </p>
             </header>
 
             <PlanSummaryBanner plan={plan} />

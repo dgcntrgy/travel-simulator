@@ -592,15 +592,9 @@ export default function PlaceDiscoveryStep({ destination }: TripRoute) {
           <div className="space-y-6 px-4 py-6 md:px-8 md:py-8">
             <header className="flex flex-wrap items-end justify-between gap-4">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600 dark:text-blue-300">
-                  Adım 2 · Gezilecek Yerler & Lezzet Keşfi
-                </p>
-                <h1 className="mt-1 text-2xl font-bold text-ink md:text-3xl">
+                <h1 className="text-2xl font-bold text-ink md:text-3xl">
                   {destination.flag} {destination.country}&apos;da neler var?
                 </h1>
-                <p className="mt-1.5 text-sm text-ink/60">
-                  Hikayeleri oku, beğendiğin yerleri rotana ekle; seçtiklerin haritada parlar.
-                </p>
               </div>
               <div className="flex gap-2">
                 <span className="card flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm text-ink" title="Seçilen mekan">
