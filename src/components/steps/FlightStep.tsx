@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowLeft,
@@ -42,9 +42,26 @@ const TYPE_BADGE: Record<FlightType, string> = {
   layover: "bg-amber-500/15 text-amber-700 dark:text-amber-200",
 };
 
-function todayIso() {
-  const d = new Date();
+function localIso(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function todayIso() {
+  return localIso(new Date());
+}
+
+/** Havayolları tarifeleri en fazla 1 yıl (365 gün) ileriye açar */
+function maxDateIso() {
+  const d = new Date();
+  d.setDate(d.getDate() + 365);
+  return localIso(d);
+}
+
+/** ISO tarihi [bugün, +365 gün] aralığına sabitler (ISO dizgeleri sözlük sırasıyla karşılaştırılabilir) */
+function clampDate(value: string): string {
+  const min = todayIso();
+  const max = maxDateIso();
+  return value < min ? min : value > max ? max : value;
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -126,12 +143,14 @@ function Notch({ side }: { side: "top" | "bottom" }) {
 /** Dijital biniş kartı (boarding pass): sol ana bölüm + kesikli çizgiyle ayrılan fiyat/barkod koçanı */
 function FlightCard({
   flight,
+  passengers,
   selected,
   cheapest,
   onSelect,
   index,
 }: {
   flight: Flight;
+  passengers: number;
   selected: boolean;
   cheapest: boolean;
   onSelect: () => void;
@@ -233,8 +252,14 @@ function FlightCard({
           <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-ink/40">Ekonomi</span>
         )}
         <div className="leading-tight">
-          <p className="font-mono text-xl font-bold tabular-nums text-ink">${flight.price.toLocaleString("en-US")}</p>
-          <p className="text-[9px] text-ink/45">kişi başı · G/D</p>
+          <p className="font-mono text-xl font-bold tabular-nums text-ink">
+            ${(flight.price * passengers).toLocaleString("en-US")}
+          </p>
+          <p className="text-[9px] text-ink/45">
+            {passengers > 1
+              ? `${passengers} yolcu toplamı • Kişi başı $${flight.price.toLocaleString("en-US")}`
+              : "1 yetişkin • Gidiş-Dönüş"}
+          </p>
         </div>
         <Barcode seed={flight.id} />
       </div>
@@ -364,6 +389,21 @@ export default function FlightStep() {
   const selectFlight = useTripStore((s) => s.selectFlight);
 
   const [filter, setFilter] = useState<Filter>("all");
+  // Elle yazılan tarih: yıl yazılırken ("0002-…") ara değerler taslakta kalır, tam yılda sabitlenip kaydedilir
+  const [dateDraft, setDateDraft] = useState(departureDate);
+  useEffect(() => setDateDraft(departureDate), [departureDate]);
+
+  // Kalıcı/eski bir tarih aralık dışındaysa düzelt
+  useEffect(() => {
+    const clamped = clampDate(departureDate);
+    if (clamped !== departureDate) setDepartureDate(clamped);
+  }, [departureDate, setDepartureDate]);
+
+  const commitDate = (value: string) => {
+    const clamped = clampDate(value);
+    setDateDraft(clamped);
+    if (clamped !== departureDate) setDepartureDate(clamped);
+  };
 
   const flights = useMemo(
     () =>
@@ -477,9 +517,15 @@ export default function FlightStep() {
                   <CalendarDays size={16} className="shrink-0 text-blue-600 dark:text-blue-300" />
                   <input
                     type="date"
-                    value={departureDate}
+                    value={dateDraft}
                     min={todayIso()}
-                    onChange={(e) => e.target.value && setDepartureDate(e.target.value)}
+                    max={maxDateIso()}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setDateDraft(v);
+                      if (v && Number(v.slice(0, 4)) >= 1000) commitDate(v);
+                    }}
+                    onBlur={(e) => commitDate(e.target.value || departureDate)}
                     className="w-full bg-transparent text-sm text-ink outline-none"
                   />
                 </label>
@@ -545,6 +591,7 @@ export default function FlightStep() {
                         key={f.id}
                         index={i}
                         flight={f}
+                        passengers={travelers}
                         selected={selectedFlight?.id === f.id}
                         cheapest={f.id === cheapestId}
                         onSelect={() => selectFlight(f)}

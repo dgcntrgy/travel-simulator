@@ -111,7 +111,7 @@ estimateTripDays(places): number           // ceil(Σ saat / 7), boşsa 0
 getPlacesForDestination(code: string): Place[]   // SADECE kürasyonlu (Record<FeaturedCode>), diğerleri []
 getRegions(places): string[]               // ilk görülme sırasıyla
 // @/data/mockFlights
-getFlights(origin, destination, date): Flight[]   // <150 km → []; kürasyonlu şablon sadece TR kalkışında, aksi halde generateFlightTemplates
+getFlights(origin, destination, date): Flight[]   // TR kalkışı + bantlı bölge → MARKET_BANDS içinde fiyat; <150 km → []; kürasyonlu şablon sadece TR kalkışında, aksi halde generateFlightTemplates
 formatDuration(min): string
 // @/data/mockHotels
 HOTEL_TIER_META: Record<HotelTier, { label; short }>   // Bütçe Dostu / Fiyat/Performans Merkez / Lüks

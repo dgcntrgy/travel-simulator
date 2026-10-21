@@ -7,8 +7,8 @@ import { AIRPORTS, isTurkishAirport, type FeaturedCode } from "./airports";
  * Uçuş simülasyon motoru.
  *
  * Kürasyonlu hedefler için gerçekçi şablonlar tutulur (diğerleri `globalDiscovery` jeneratöründen gelir) (havayolu, aktarma merkezi, bekleme süresi,
- * İstanbul çıkışlı baz fiyat). Süreler büyük daire mesafesinden, fiyatlar ise mesafe +
- * tarih talebi + küçük deterministik dalgalanma ile hesaplanır. Çıktı şekli, ileride
+ * İstanbul çıkışlı baz fiyat). Süreler büyük daire mesafesinden hesaplanır; Türkiye çıkışlı fiyatlar
+ * bölgesel piyasa bantlarına (`MARKET_BANDS`) + tarife kurallarına (`fareFactor`) göre belirlenir. Çıktı şekli, ileride
  * Travelpayouts affiliate API yanıtına eşlenebilecek düz bir `Flight[]` dizisidir.
  */
 
@@ -220,24 +220,74 @@ function jitter(seed: string): number {
   return 1 + ((Math.abs(h) % 81) - 40) / 1000;
 }
 
-/** Hafta günü ve rezervasyon zamanlamasına göre talep çarpanı */
-function demandFactor(departureDate: string): number {
+/** Gerçek tarife mantığı: son dakika (<14 gün) +%20, erken rezervasyon (>60 gün) -%12, Cuma–Pazar +%10 */
+const LAST_MINUTE_DAYS = 14;
+const EARLY_BOOKING_DAYS = 60;
+const LAST_MINUTE = 1.2;
+const EARLY_BOOKING = 0.88;
+const WEEKEND = 1.1;
+const MAX_FARE_FACTOR = LAST_MINUTE * WEEKEND;
+const MIN_FARE_FACTOR = EARLY_BOOKING;
+
+function fareFactor(departureDate: string): number {
   const date = new Date(`${departureDate}T12:00:00`);
   if (Number.isNaN(date.getTime())) return 1;
 
   let factor = 1;
   const day = date.getDay();
-  if (day === 5 || day === 0) factor += 0.1; // Cuma / Pazar yoğun
-  if (day === 2 || day === 3) factor -= 0.06; // Salı / Çarşamba sakin
+  if (day === 5 || day === 6 || day === 0) factor *= WEEKEND;
 
   const daysAhead = (date.getTime() - Date.now()) / 86_400_000;
-  if (daysAhead < 14) factor += 0.18;
-  else if (daysAhead > 60) factor -= 0.08;
-
-  const month = date.getMonth();
-  if (month === 6 || month === 7 || month === 11) factor += 0.12; // Temmuz, Ağustos, Aralık
+  if (daysAhead < LAST_MINUTE_DAYS) factor *= LAST_MINUTE;
+  else if (daysAhead > EARLY_BOOKING_DAYS) factor *= EARLY_BOOKING;
 
   return factor;
+}
+
+/**
+ * Türkiye çıkışlı gidiş-dönüş ekonomi piyasa bantları (Skyscanner / Google Flights 2026 ortalamaları, USD).
+ * kmMin–kmMax: bölge içinde mesafeye göre bantta konumlanma.
+ */
+const MARKET_BANDS = {
+  europe: { min: 180, max: 420, kmMin: 500, kmMax: 3300 },
+  middleEast: { min: 210, max: 460, kmMin: 800, kmMax: 3600 },
+  eastAsia: { min: 680, max: 1150, kmMin: 6000, kmMax: 9800 },
+  americas: { min: 750, max: 1280, kmMin: 7500, kmMax: 12500 },
+} as const;
+type MarketRegion = keyof typeof MARKET_BANDS;
+
+const COUNTRY_REGION: Record<string, MarketRegion> = {
+  "Birleşik Krallık": "europe", "Fransa": "europe", "Almanya": "europe", "Hollanda": "europe",
+  "İtalya": "europe", "İspanya": "europe", "Avusturya": "europe", "İsviçre": "europe",
+  "Yunanistan": "europe", "Portekiz": "europe", "Çekya": "europe", "Macaristan": "europe",
+  "Hırvatistan": "europe", "Gürcistan": "europe",
+  "BAE": "middleEast", "Katar": "middleEast", "Ürdün": "middleEast", "Mısır": "middleEast", "Fas": "middleEast",
+  "Japonya": "eastAsia", "Güney Kore": "eastAsia", "Tayland": "eastAsia", "Singapur": "eastAsia",
+  "Hong Kong": "eastAsia", "Çin": "eastAsia", "Vietnam": "eastAsia", "Endonezya": "eastAsia",
+  "ABD": "americas", "Kanada": "americas", "Meksika": "americas", "Brezilya": "americas",
+  "Arjantin": "americas", "Peru": "americas",
+};
+
+/** Bant içi ürün konumu: düşük maliyetli < aktarmalı < direkt bayrak taşıyıcı */
+function productTier(t: FlightTemplate): number {
+  if (t.checkedBaggageKg === 0) return 0;
+  return t.hub ? 0.35 : 0.85;
+}
+
+const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
+
+/**
+ * Bantlı rotada fiyat: taban fiyat bandın "tarife payı bırakılmış" iç aralığına yerleşir, böylece
+ * son dakika/hafta sonu/erken rezervasyon çarpanları uygulandığında bile sonuç piyasa bandında kalır.
+ */
+function marketPrice(region: MarketRegion, directKm: number, t: FlightTemplate, seed: string, fare: number): number {
+  const band = MARKET_BANDS[region];
+  const lo = band.min / MIN_FARE_FACTOR;
+  const hi = band.max / MAX_FARE_FACTOR;
+  const distancePos = clamp01((directKm - band.kmMin) / (band.kmMax - band.kmMin));
+  const pos = clamp01(0.55 * distancePos + 0.45 * productTier(t) + (jitter(seed) - 1));
+  const price = (lo + pos * (hi - lo)) * fare;
+  return Math.round(Math.min(band.max, Math.max(band.min, price)));
 }
 
 function toMinutes(hhmm: string): number {
@@ -258,7 +308,9 @@ export function getFlights(origin: Airport, destination: Airport, departureDate:
   const curated = isTurkishAirport(origin) ? FLIGHT_TEMPLATES[destination.code as FeaturedCode] : undefined;
   const templates = curated ?? generateFlightTemplates(origin, destination);
   const istKm = routeKm(AIRPORTS.IST, destination);
-  const demand = demandFactor(departureDate);
+  const fare = fareFactor(departureDate);
+  const directKm = routeKm(origin, destination);
+  const region = isTurkishAirport(origin) ? COUNTRY_REGION[destination.country] : undefined;
 
   return templates.map((t) => {
     const hub = t.hub ? AIRPORTS[t.hub] : undefined;
@@ -275,7 +327,10 @@ export function getFlights(origin: Airport, destination: Airport, departureDate:
       ? routeKm(origin, destination, hub) / (hub ? routeKm(AIRPORTS.IST, destination, hub) : istKm)
       : 1;
     const id = `${origin.code}-${destination.code}-${t.airlineCode}${hub ? `-${hub.code}` : ""}`;
-    const price = Math.round(t.basePrice * distanceRatio * demand * jitter(`${id}:${departureDate}`));
+    const seed = `${id}:${departureDate}`;
+    const price = region
+      ? marketPrice(region, directKm, t, seed, fare)
+      : Math.round(t.basePrice * distanceRatio * fare * jitter(seed));
 
     const depLocal = toMinutes(t.departure);
     const arrLocal = depLocal + totalDurationMinutes + (destination.utcOffset - origin.utcOffset) * 60;
