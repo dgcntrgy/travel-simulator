@@ -54,7 +54,22 @@ export interface Flight {
   cabinBaggageKg: number;
   checkedBaggageKg: number;
   tags: string[];
+  /** Anlık kampanya yakalandıysa dolu; `price` zaten indirimli fiyattır */
+  campaign?: FlightCampaign;
 }
+
+/** "🔥 Fiyat Düştü": rota + tarih + gün tohumuyla bir uçuşta yakalanan indirim */
+export interface FlightCampaign {
+  /** Kişi başı indirimsiz gidiş-dönüş fiyatı (USD) */
+  originalPrice: number;
+  /** Yüzde indirim (12–22) */
+  discountPercent: number;
+  /** Bu fiyattan kalan koltuk (2–7) */
+  seatsLeft: number;
+}
+
+/** Uçuş fiyatlarının kaynağı: gerçek API ya da piyasa bandı simülasyonu */
+export type FlightPriceSource = "travelpayouts" | "amadeus" | "simulation";
 
 /** sight = Gezilecek Yer · food = Yerel Lezzet · culture = Deneyim */
 export type PlaceCategory = "sight" | "food" | "culture";

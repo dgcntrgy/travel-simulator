@@ -9,6 +9,9 @@ import {
   CalendarDays,
   Check,
   Clock,
+  ExternalLink,
+  Flame,
+  Globe,
   Luggage,
   MapPin,
   Minus,
@@ -21,11 +24,12 @@ import {
 import WorldMap from "@/components/map/WorldMap";
 import { DESTINATIONS, SEARCHABLE_ORIGINS } from "@/data/airports";
 import { formatDuration, getFlights } from "@/data/mockFlights";
+import { applyCampaigns, verificationLinks } from "@/lib/flightCampaigns";
 import CitySelectDropdown from "@/components/ui/CitySelectDropdown";
 import { getDestinationProfile, matchesDestination } from "@/lib/globalDiscovery";
 import { useTripStore } from "@/store/useTripStore";
 import { cn } from "@/lib/cn";
-import type { Airport, Flight, FlightType } from "@/types/trip";
+import type { Airport, Flight, FlightPriceSource, FlightType } from "@/types/trip";
 import { riseIn, SLIDE_FROM_LEFT, SLIDE_FROM_RIGHT, SPRING_IN, STEP_TRANSITION } from "@/lib/motion";
 
 type Filter = "all" | FlightType;
@@ -148,6 +152,7 @@ function FlightCard({
   cheapest,
   onSelect,
   index,
+  departureDate,
 }: {
   flight: Flight;
   passengers: number;
@@ -156,116 +161,181 @@ function FlightCard({
   onSelect: () => void;
   /** Liste sırası: kartlar dalga halinde sırayla gelir */
   index: number;
+  departureDate: string;
 }) {
+  const campaign = flight.campaign;
   return (
-    <motion.button
-      layout
-      type="button"
-      onClick={onSelect}
-      {...riseIn(index)}
-      exit={{ opacity: 0, y: -8, transition: { duration: 0.2 } }}
-      whileHover={{ y: -3, transition: SPRING_IN }}
-      whileTap={{ scale: 0.99 }}
-      aria-pressed={selected}
-      style={{ "--stub": "7.25rem" } as React.CSSProperties}
-      className={cn(
-        "card group relative flex w-full overflow-hidden rounded-2xl text-left backdrop-blur-xl transition-[border-color,box-shadow]",
-        selected
-          ? "border-amber-400/80! shadow-[0_0_32px_-6px_rgba(251,191,36,0.6)]! ring-2 ring-amber-400/70"
-          : "hover:border-ink/25!",
-      )}
-    >
-      <Notch side="top" />
-      <Notch side="bottom" />
+    <motion.div layout {...riseIn(index)} exit={{ opacity: 0, y: -8, transition: { duration: 0.2 } }}>
+      <motion.button
+        type="button"
+        onClick={onSelect}
+        whileHover={{ y: -3, transition: SPRING_IN }}
+        whileTap={{ scale: 0.99 }}
+        aria-pressed={selected}
+        style={{ "--stub": "7.25rem" } as React.CSSProperties}
+        className={cn(
+          "card group relative flex w-full overflow-hidden rounded-2xl text-left backdrop-blur-xl transition-[border-color,box-shadow]",
+          selected
+            ? "border-amber-400/80! shadow-[0_0_32px_-6px_rgba(251,191,36,0.6)]! ring-2 ring-amber-400/70"
+            : "hover:border-ink/25!",
+        )}
+      >
+        <Notch side="top" />
+        <Notch side="bottom" />
 
-      {/* Ana bölüm */}
-      <div className="min-w-0 flex-1 p-4">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <span
-              className={cn(
-                "grid h-8 w-8 shrink-0 place-items-center rounded-lg font-mono text-[11px] font-bold",
-                TYPE_BADGE[flight.type],
-              )}
-            >
-              {flight.airlineCode}
-            </span>
-            <div className="min-w-0 leading-tight">
-              <p className="truncate text-sm font-semibold text-ink">{flight.airline}</p>
-              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink/45">
-                Biniş Kartı · {flight.flightNumber}
+        {/* Ana bölüm */}
+        <div className="min-w-0 flex-1 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <span
+                className={cn(
+                  "grid h-8 w-8 shrink-0 place-items-center rounded-lg font-mono text-[11px] font-bold",
+                  TYPE_BADGE[flight.type],
+                )}
+              >
+                {flight.airlineCode}
+              </span>
+              <div className="min-w-0 leading-tight">
+                <p className="truncate text-sm font-semibold text-ink">{flight.airline}</p>
+                <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink/45">
+                  Biniş Kartı · {flight.flightNumber}
+                </p>
+              </div>
+            </div>
+            {campaign ? (
+              <span className="campaign-badge flex shrink-0 items-center gap-1 rounded-full bg-gradient-to-r from-rose-500 to-orange-500 px-2 py-0.5 text-[10px] font-bold text-white">
+                <Flame size={11} /> Anlık Kampanya (-%{campaign.discountPercent})
+              </span>
+            ) : (
+              cheapest && (
+                <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-200">
+                  En uygun
+                </span>
+              )
+            )}
+          </div>
+
+          <div className="mt-3 flex items-center gap-2">
+            <div className="leading-tight">
+              <p className="font-mono text-2xl font-black tracking-tight text-ink sm:text-3xl">{flight.origin.code}</p>
+              <p className="max-w-[6.5rem] truncate text-[11px] text-ink/50">{flight.origin.city}</p>
+              <p className="mt-0.5 font-mono text-sm font-semibold text-ink/80">{flight.departureTime}</p>
+            </div>
+            <DurationBar flight={flight} selected={selected} />
+            <div className="text-right leading-tight">
+              <p className="font-mono text-2xl font-black tracking-tight text-ink sm:text-3xl">{flight.destination.code}</p>
+              <p className="ml-auto max-w-[6.5rem] truncate text-[11px] text-ink/50">{flight.destination.city}</p>
+              <p className="mt-0.5 font-mono text-sm font-semibold text-ink/80">
+                {flight.arrivalTime}
+                {flight.arrivalDayOffset > 0 && (
+                  <sup className="ml-0.5 text-[10px] text-amber-600 dark:text-amber-200">+{flight.arrivalDayOffset}</sup>
+                )}
               </p>
             </div>
           </div>
-          {cheapest && (
-            <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-200">
-              En uygun
+
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            {flight.tags
+              .filter((t) => t !== "En uygun" && t !== "Kesintisiz")
+              .map((t) => (
+                <span key={t} className="rounded-full bg-ink/[0.06] px-2 py-0.5 text-[10px] text-ink/60">
+                  {t}
+                </span>
+              ))}
+            <span className="ml-auto flex items-center gap-1 text-[10px] text-ink/45">
+              <Luggage size={11} /> {flight.checkedBaggageKg}kg
             </span>
+          </div>
+
+          {campaign && (
+            <p className="mt-2.5 rounded-lg border border-orange-500/30 bg-orange-500/10 px-2.5 py-1.5 text-[11px] font-medium text-orange-800 dark:text-orange-200">
+              🔥 Fiyat Düştü · Normalde <s className="opacity-70">{usd(campaign.originalPrice * passengers)}</s> ➔
+              Kampanyalı <b>{usd(flight.price * passengers)}</b> • %{campaign.discountPercent} İndirim • Son{" "}
+              {campaign.seatsLeft} Koltuk
+            </p>
           )}
         </div>
 
-        <div className="mt-3 flex items-center gap-2">
+        {/* Koçan: kesikli ayırıcı + fiyat + barkod */}
+        <div
+          className={cn(
+            "relative flex w-[var(--stub)] shrink-0 flex-col items-center justify-between gap-2 border-l-2 border-dashed border-ink/15 px-2 py-4 text-center transition-colors",
+            selected ? "bg-amber-400/10" : "bg-ink/[0.02]",
+          )}
+        >
+          {selected ? (
+            <span className="flex items-center gap-1 rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-bold text-amber-950">
+              <Check size={10} strokeWidth={3} /> Seçildi
+            </span>
+          ) : (
+            <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-ink/40">Ekonomi</span>
+          )}
           <div className="leading-tight">
-            <p className="font-mono text-2xl font-black tracking-tight text-ink sm:text-3xl">{flight.origin.code}</p>
-            <p className="max-w-[6.5rem] truncate text-[11px] text-ink/50">{flight.origin.city}</p>
-            <p className="mt-0.5 font-mono text-sm font-semibold text-ink/80">{flight.departureTime}</p>
-          </div>
-          <DurationBar flight={flight} selected={selected} />
-          <div className="text-right leading-tight">
-            <p className="font-mono text-2xl font-black tracking-tight text-ink sm:text-3xl">{flight.destination.code}</p>
-            <p className="ml-auto max-w-[6.5rem] truncate text-[11px] text-ink/50">{flight.destination.city}</p>
-            <p className="mt-0.5 font-mono text-sm font-semibold text-ink/80">
-              {flight.arrivalTime}
-              {flight.arrivalDayOffset > 0 && (
-                <sup className="ml-0.5 text-[10px] text-amber-600 dark:text-amber-200">+{flight.arrivalDayOffset}</sup>
+            {campaign && (
+              <p className="font-mono text-[11px] tabular-nums text-ink/45 line-through">
+                {usd(campaign.originalPrice * passengers)}
+              </p>
+            )}
+            <p
+              className={cn(
+                "font-mono text-xl font-bold tabular-nums",
+                campaign ? "text-orange-600 dark:text-orange-300" : "text-ink",
               )}
+            >
+              {usd(flight.price * passengers)}
+            </p>
+            <p className="text-[9px] text-ink/45">
+              {passengers > 1
+                ? `${passengers} yolcu toplamı • Kişi başı $${flight.price.toLocaleString("en-US")}`
+                : "1 yetişkin • Gidiş-Dönüş"}
             </p>
           </div>
+          <Barcode seed={flight.id} />
         </div>
-
-        <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          {flight.tags
-            .filter((t) => t !== "En uygun" && t !== "Kesintisiz")
-            .map((t) => (
-              <span key={t} className="rounded-full bg-ink/[0.06] px-2 py-0.5 text-[10px] text-ink/60">
-                {t}
-              </span>
-            ))}
-          <span className="ml-auto flex items-center gap-1 text-[10px] text-ink/45">
-            <Luggage size={11} /> {flight.checkedBaggageKg}kg
-          </span>
-        </div>
-      </div>
-
-      {/* Koçan: kesikli ayırıcı + fiyat + barkod */}
-      <div
-        className={cn(
-          "relative flex w-[var(--stub)] shrink-0 flex-col items-center justify-between gap-2 border-l-2 border-dashed border-ink/15 px-2 py-4 text-center transition-colors",
-          selected ? "bg-amber-400/10" : "bg-ink/[0.02]",
+      </motion.button>
+      <AnimatePresence initial={false}>
+        {selected && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <VerifyBar flight={flight} passengers={passengers} departureDate={departureDate} />
+          </motion.div>
         )}
-      >
-        {selected ? (
-          <span className="flex items-center gap-1 rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-bold text-amber-950">
-            <Check size={10} strokeWidth={3} /> Seçildi
-          </span>
-        ) : (
-          <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-ink/40">Ekonomi</span>
-        )}
-        <div className="leading-tight">
-          <p className="font-mono text-xl font-bold tabular-nums text-ink">
-            ${(flight.price * passengers).toLocaleString("en-US")}
-          </p>
-          <p className="text-[9px] text-ink/45">
-            {passengers > 1
-              ? `${passengers} yolcu toplamı • Kişi başı $${flight.price.toLocaleString("en-US")}`
-              : "1 yetişkin • Gidiş-Dönüş"}
-          </p>
-        </div>
-        <Barcode seed={flight.id} />
-      </div>
-    </motion.button>
+      </AnimatePresence>
+    </motion.div>
   );
 }
+
+const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
+
+/** Seçili kartın altında açılan bar: rota/tarih/yolcu gömülü Google Flights & Skyscanner aramaları */
+function VerifyBar({ flight, passengers, departureDate }: { flight: Flight; passengers: number; departureDate: string }) {
+  const links = verificationLinks(flight.origin.code, flight.destination.code, departureDate, passengers);
+  const linkClass =
+    "flex items-center gap-1.5 rounded-lg glass-secondary px-3 py-1.5 text-xs font-semibold text-ink/80 hover:text-ink";
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-blue-500/25 bg-blue-500/[0.06] px-3 py-2.5">
+      <p className="flex min-w-0 flex-1 items-center gap-1.5 text-xs font-semibold text-blue-700 dark:text-blue-200">
+        <Globe size={14} className="shrink-0" /> Canlı Fiyatı & Kampanyayı Doğrula
+      </p>
+      <a href={links.google} target="_blank" rel="noopener noreferrer" className={linkClass}>
+        Google Flights <ExternalLink size={12} />
+      </a>
+      <a href={links.skyscanner} target="_blank" rel="noopener noreferrer" className={linkClass}>
+        Skyscanner <ExternalLink size={12} />
+      </a>
+    </div>
+  );
+}
+
+const SOURCE_LABEL: Record<FlightPriceSource, string> = {
+  travelpayouts: "Canlı fiyat · Travelpayouts",
+  amadeus: "Canlı fiyat · Amadeus",
+  simulation: "Piyasa bandı tahmini",
+};
 
 /** Alt CTA: seçili uçuş özeti + "Adım 2'ye Geç" */
 function FlightActionBar() {
@@ -405,13 +475,47 @@ export default function FlightStep() {
     if (clamped !== departureDate) setDepartureDate(clamped);
   };
 
-  const flights = useMemo(
-    () =>
-      origin && destination
-        ? getFlights(origin, destination, departureDate).sort((a, b) => a.price - b.price)
-        : [],
+  // Anında yerel simülasyon (aynı kampanya algoritması), ardından /api/flights canlı sonucu üzerine yazar
+  const routeKey = origin && destination ? `${origin.code}-${destination.code}-${departureDate}` : "";
+  const localFlights = useMemo(
+    () => (origin && destination ? applyCampaigns(getFlights(origin, destination, departureDate), departureDate) : []),
     [origin, destination, departureDate],
   );
+  const [live, setLive] = useState<{ key: string; flights: Flight[]; source: FlightPriceSource } | null>(null);
+  useEffect(() => {
+    if (!origin || !destination) return;
+    const key = `${origin.code}-${destination.code}-${departureDate}`;
+    const ctrl = new AbortController();
+    const qs = new URLSearchParams({
+      origin: origin.code,
+      destination: destination.code,
+      date: departureDate,
+      passengers: String(travelers),
+    });
+    fetch(`/api/flights?${qs}`, { signal: ctrl.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { flights: Flight[]; source: FlightPriceSource } | null) => {
+        if (d) setLive({ key, flights: d.flights, source: d.source });
+      })
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, [origin, destination, departureDate, travelers]);
+
+  const liveHit = live?.key === routeKey ? live : null;
+  const flights = useMemo(
+    () => [...(liveHit?.flights ?? localFlights)].sort((a, b) => a.price - b.price),
+    [liveHit, localFlights],
+  );
+  const priceSource: FlightPriceSource = liveHit?.source ?? "simulation";
+
+  // Canlı fiyat geldiğinde seçili uçuşun fiyat/kampanyasını güncel tut (bütçe doğru kalsın)
+  useEffect(() => {
+    if (!selectedFlight) return;
+    const fresh = flights.find((f) => f.id === selectedFlight.id);
+    if (fresh && (fresh.price !== selectedFlight.price || !!fresh.campaign !== !!selectedFlight.campaign)) {
+      selectFlight(fresh);
+    }
+  }, [flights, selectedFlight, selectFlight]);
   const visible = filter === "all" ? flights : flights.filter((f) => f.type === filter);
   const cheapestId = flights[0]?.id;
   const directCount = flights.filter((f) => f.type === "direct").length;
@@ -566,6 +670,16 @@ export default function FlightStep() {
                     <span className="ml-2 font-normal text-ink/50">
                       {flights.length} uçuş · {directCount} direkt · {flights.length - directCount} aktarmalı
                     </span>
+                    <span
+                      className={cn(
+                        "ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                        priceSource === "simulation"
+                          ? "bg-ink/[0.06] text-ink/55"
+                          : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-200",
+                      )}
+                    >
+                      {SOURCE_LABEL[priceSource]}
+                    </span>
                   </p>
                   <div className="flex rounded-xl bg-ink/[0.06] p-1">
                     {FILTERS.map((f) => (
@@ -594,6 +708,7 @@ export default function FlightStep() {
                         passengers={travelers}
                         selected={selectedFlight?.id === f.id}
                         cheapest={f.id === cheapestId}
+                        departureDate={departureDate}
                         onSelect={() => selectFlight(f)}
                       />
                     ))}

@@ -993,3 +993,17 @@ body {
     display: block !important;
   }
 }
+
+/* Anlık kampanya rozeti: turuncu nefes alan parıltı */
+@keyframes campaign-glow {
+  0%, 100% { box-shadow: 0 0 6px rgba(249, 115, 22, 0.45); }
+  50% { box-shadow: 0 0 16px rgba(244, 63, 94, 0.75); }
+}
+.campaign-badge {
+  animation: campaign-glow 1.8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .campaign-badge {
+    animation: none;
+  }
+}

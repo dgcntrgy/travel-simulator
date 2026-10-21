@@ -16,8 +16,10 @@ interface Flight {
   origin: Airport | null; destination: Airport | null;   // başlangıç null (kullanıcı seçer); reset() → null layover?: Layover; // sadece type==="layover"
   price: number;                // kişi başı gidiş-dönüş USD
   totalDurationMinutes: number; departureTime: string; arrivalTime: string; arrivalDayOffset: number;
-  cabinBaggageKg: number; checkedBaggageKg: number; tags: string[];
+  cabinBaggageKg: number; checkedBaggageKg: number; tags: string[]; campaign?: FlightCampaign; // varsa price = indirimli
 }
+interface FlightCampaign { originalPrice /* kişi başı indirimsiz */; discountPercent /* 12–22 */; seatsLeft /* 2–7 */ }
+type FlightPriceSource = "travelpayouts" | "amadeus" | "simulation";
 interface Place {
   id: string; name: string; wikiTitle: string;
   cityRegion: string;           // Adım 3 kümeleme anahtarı (örn "Tokyo" / "Kyoto")
@@ -112,6 +114,11 @@ getPlacesForDestination(code: string): Place[]   // SADECE kürasyonlu (Record<F
 getRegions(places): string[]               // ilk görülme sırasıyla
 // @/data/mockFlights
 getFlights(origin, destination, date): Flight[]   // TR kalkışı + bantlı bölge → MARKET_BANDS içinde fiyat; <150 km → []; kürasyonlu şablon sadece TR kalkışında, aksi halde generateFlightTemplates
+// @/lib/flightCampaigns
+applyCampaigns(flights, departureDate, today?): Flight[]   // 1 uçuşa (en ucuz hariç) kampanya; deterministik rota+tarih+gün
+verificationLinks(originCode, destCode, date, passengers): { google; skyscanner }
+// @/lib/server/liveFlights (sunucu)
+getLiveFlights(originCode, destCode, date): Promise<{ flights; source: FlightPriceSource; liveMinPrice: number|null; fetchedAt }>   // use cache + cacheLife("hours")
 formatDuration(min): string
 // @/data/mockHotels
 HOTEL_TIER_META: Record<HotelTier, { label; short }>   // Bütçe Dostu / Fiyat/Performans Merkez / Lüks
@@ -153,6 +160,7 @@ generateFlightTemplates(origin, destination): FlightTemplate[]
 generateHotels(city, center: LngLat, places, costIndex): Hotel[]   // 3 tier, nights 0
 discoverLivePlaces(destination): Promise<Place[]>   // önbellekli, hata fırlatabilir
 peekLivePlaces(code): Place[] | null
+// @/lib/useDestinationPlaces
 useDestinationPlaces(destination) → { places; curatedCount; liveCount; liveStatus: "loading"|"ready"|"error"; retry() }
 // @/lib/itinerary
 type DaySlot = "morning"|"noon"|"afternoon"|"evening"; DAY_SLOTS (sıralı)

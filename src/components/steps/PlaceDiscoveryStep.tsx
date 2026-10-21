@@ -28,7 +28,7 @@ import {
 import PlaceLocationMap from "@/components/map/PlaceLocationMap";
 import WorldMap from "@/components/map/WorldMap";
 import { CATEGORY_META, estimateTripDays, getRegions } from "@/data/mockPlaces";
-import { useDestinationPlaces } from "@/lib/globalDiscovery";
+import { useDestinationPlaces } from "@/lib/useDestinationPlaces";
 import { fetchWikiImage } from "@/lib/wikipedia";
 import { useTripStore } from "@/store/useTripStore";
 import { cn } from "@/lib/cn";
