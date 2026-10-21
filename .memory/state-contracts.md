@@ -39,7 +39,8 @@ type TransitMode = "walk" | "metro" | "bus" | "tram" | "train";
 interface TransitLeg { placeId; mode: TransitMode; line: string /* route varsa route.line */; distanceKm; minutes /* route varsa yürü+bekle+sürüş+yürü */; cost /* kişi başı tek yön */; route?: TransitRoute /* walk'ta yok */ }
 interface TransitStation { name; coordinates: LngLat }
 interface TransitRoute { line; colorName; color; direction /* son durak */; from: TransitStation; to: TransitStation; stops; headwayMinutes; firstDeparture /* "05:30" | "24 saat" */;
-  walkToMinutes; waitMinutes /* ceil(headway/2) */; rideMinutes; walkFromMinutes; stationWord: "İstasyonu"|"Durağı"; path: LngLat[] /* biniş→iniş istasyonları */; steps: string[] /* 4 adım */ }
+  walkToMinutes; waitMinutes /* ceil(headway/2) */; rideMinutes; walkFromMinutes; path: LngLat[] /* biniş→iniş istasyonları */ }
+  // stationWord / steps KALDIRILDI → metinler seçili dilde stationLabel()/legSteps() ile üretilir; colorName veri setinde TR ("Turuncu Hat") → lineColorName()
 interface IntercityTransfer { from; to; mode: "train"|"bus"|"flight"; name; minutes; cost /* kişi başı */; isReturn?: boolean }
 interface BudgetBreakdown { flight: number; hotel: number; transit: number; foodAndEntries: number; total: number }
 interface PublicUser { id; name; email; phone /* "" = yok */; lastRoute /* "" = yok */; isPro: boolean; createdAt /* ISO */ }  // şifre hash'i ASLA istemciye gitmez
@@ -138,7 +139,11 @@ haversineKm(a, b); estimateFlightMinutes(km); routeInfo(o, d): { distanceKm; dir
 countryOf(a); profileForAirport(a): DestinationProfile; nearestAirport([lng,lat]): { airport; distanceKm }
 interface FlightTemplate { airline; airlineCode; flightNumber; hub?: string; layoverMinutes?; basePrice; departure; cabinBaggageKg; checkedBaggageKg; tags }
 generateFlightTemplates(origin, destination)   // ≥150 km her çiftte en az 1 seçenek
-// @/lib/i18n (sunucu-güvenli)
+// @/lib/i18n (sunucu-güvenli) — sözlük = ana tr/en/… + @/lib/i18nGuide GUIDE_* (Adım 2–4, harita, dil kartları, admin) yayılımı
+// Ek yardımcılar: intlLocale(locale) ("de-DE"); lineColorName(locale, "Turuncu Hat"); transferName(locale, name) (yalnız "İç Hat Uçuşu"/"Bölgesel Tren" çevrilir);
+//   areaLabel(locale, "X çevresi"|"X merkez"); languageName(code, fallbackTR, locale) (Intl.DisplayNames language)
+// Anahtar aileleri: unit.* (people/nights/perNight/days/cities/places/rooms/stops/hours/cards/every/firstDeparture/dayN), mode.*, cat.<category>,
+//   tier.<tier>[.short], slot.<slot>, itin.*, g.* (FinalGuide), h.* (Adım 3), p.* (Adım 2), m.* (harita), pc.*, ph.*, lc.*, tf.*, st.*, rs.*, adm.*, app.loading
 LOCALES; type Locale; LOCALE_META; isLocale; localeForCountry(cc); localeFromLanguages(tags); type TranslationKey
 translate(locale, key, vars?); translateTag(locale, tag); formatDurationLocale(locale, min); formatTimeDiff(locale, h); countryName(a, locale); cityName(a, locale)
 // @/lib/useI18n  →  useT(): T = ((key, vars?) => string) & { locale }
@@ -156,13 +161,14 @@ buildTripPlan(places, arrival: Airport): TripPlan
 //  CityPlan { city; places; visitHours; days; nights; dayStart; dayEnd; center: LngLat; idealAvgKm; hotels: HotelEvaluation[] (puana göre) }
 //  HotelEvaluation { hotel (nights atanmış); score 35–99; avgDistanceKm; centerDistanceKm; legs: TransitLeg[]; transitCost (gidiş-dönüş, kişi başı) }
 planLeg(hotel: Hotel, place): TransitLeg   // ≤walkMaxKm yürüyüş; değilse CITY_LINES'ta otel+mekana ≤1.2 km istasyonu olan AYNI hat (ana profil, otobüs değil; loop iki yön) → yoksa sentetik (otel semti / mekan adı istasyonları, hash'li renk)
-formatFrequency(route): string   // "Her 4 dk'da bir • İlk sefer 05:30"
-legSteps(leg, place): string[]   // route.steps ya da tek yürüyüş adımı
+formatFrequency(route, locale): string   // "Her 4 dk'da bir • İlk sefer 05:30" / "Every 4 min • First departure 05:30"
+legSteps(leg, place, locale): string[]   // 4 adım (rs.walkTo/board/alight/walkFrom) ya da tek yürüyüş adımı
+stationLabel(locale, mode, name): string // st.station "{name} İstasyonu" | bus → st.stop "{name} Durağı"
 directionsUrl(from: LngLat, to: LngLat, mode): string   // google.com/maps/dir/?api=1&origin&destination&travelmode=transit|walking
 defaultHotel(city): HotelEvaluation | undefined       // en yüksek puan, eşitlikte central
 chosenEvaluation(city, chosen: Hotel[]): HotelEvaluation | undefined  // seçili yoksa default
 computeTransitCost(plan, chosen: Hotel[]): number     // kişi başı, Math.round
-formatMinutes(min): string                            // "2 sa 15 dk"
+formatMinutes(min, locale): string                    // = formatDurationLocale ("2 sa 15 dk" / "2 h 15 min")
 // @/lib/wikipedia
 fetchWikiSummary(title): Promise<{ title; imageUrl: string|null; extract; pageUrl: string|null } | null>
 fetchWikiImage(title): Promise<string | null>
@@ -170,9 +176,10 @@ fetchLocalTitles(titles: string[], lang: string): Promise<Record<enTitle, yerelB
 // @/data/transitLines
 CITY_LINES: Record<cityRegion, TransitLineDef[]>   // TransitLineDef { name; colorName; color; termini: [azalanYön, artanYön]; headway; firstDeparture; loop?; stations: [ad, lng, lat][] }
 // @/data/languageCards
-type PhraseCategory = "address"|"transit"|"restaurant"|"shopping"|"emergency"; PHRASE_CATEGORIES {id; emoji; label}[]
-PHRASE_KEYS {key; category; tr}[]  // 12 ifade; Free'de index < 2 açık
-PHRASE_BOOKS: Record<LanguageCode, { takeMePron; speechLang; phrases: Record<PhraseKey, [local, pron, trOverride?]> }>
+type PhraseCategory = "address"|"transit"|"restaurant"|"shopping"|"emergency"; PHRASE_CATEGORIES {id; emoji}[]  // sekme adı t(`pc.${id}`)
+PHRASE_KEYS {key; category}[]  // 12 ifade; Free'de index < 2 açık; anlam t(`ph.${key}`)
+type PhraseVariant = "bus"|"busTram"|"vehicle"|"stop"|"here"|"busStop"|"slower"
+PHRASE_BOOKS: Record<LanguageCode, { takeMePron; speechLang; phrases: Record<PhraseKey, [local, pron /* TR okunuş */, variant?]> }>  // variant → t(`ph.${key}.${variant}`)
 // @/lib/globalDiscovery
 type Continent = "Avrupa"|"Asya"|"Orta Doğu"|"Afrika"|"Amerika"|"Okyanusya"; CONTINENTS
 interface CityInfo { name /* = cityRegion */; coordinates: LngLat }
@@ -188,7 +195,8 @@ peekLivePlaces(code): Place[] | null
 useDestinationPlaces(destination) → { places; curatedCount; liveCount; liveStatus: "loading"|"ready"|"error"; retry() }
 // @/lib/itinerary
 type DaySlot = "morning"|"noon"|"afternoon"|"evening"; DAY_SLOTS (sıralı)
-SLOT_META: Record<DaySlot, { label; emoji; range }>  // Sabah 09–12 · Öğle & Lezzet 12–15 · İkindi Keşfi 15–18:30 · Akşam & Gece 19–22:30
+SLOT_META: Record<DaySlot, { label; emoji; range }>  // Sabah & Kahvaltı 09–12 · Öğle & Lezzet 12–15 · İkindi Keşfi 15–18:30 · Akşam & Gece 19–22:30 (UI: t(`slot.${slot}`))
+type FreeNote = "explore" | "arrival"; ItineraryItem free = { kind: "free"; note: FreeNote; city } // metin: itin.noteExplore {city} / itin.noteArrival
 // slotOf: <12:00 sabah, <15:00 öğle, <18:30 ikindi, sonrası akşam
 type ItineraryItem = { time: "HH:MM"; slot } & ({kind:"arrival"; flight|null} | {kind:"checkin"; hotel} | {kind:"transfer"; transfer} | {kind:"place"; place; leg?: TransitLeg} | {kind:"free"; note} | {kind:"departure"; flight|null})
 interface ItineraryDay { day /* 1 tabanlı */; date: Date|null; city; hotel?: Hotel; items: ItineraryItem[] }

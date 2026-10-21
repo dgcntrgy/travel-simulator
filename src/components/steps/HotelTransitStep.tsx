@@ -23,7 +23,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import WorldMap from "@/components/map/WorldMap";
-import { HOTEL_TIER_META } from "@/data/mockHotels";
 import {
   TRANSIT_MODE_META,
   buildTripPlan,
@@ -34,6 +33,7 @@ import {
   type HotelEvaluation,
   type TripPlan,
 } from "@/lib/routeOptimizer";
+import { areaLabel, cityName, intlLocale, transferName, type Locale } from "@/lib/i18n";
 import { useT } from "@/lib/useI18n";
 import { hotelNightlyFor, hotelTotalFor, roomsFor, useTripStore } from "@/store/useTripStore";
 import { cn } from "@/lib/cn";
@@ -55,6 +55,9 @@ const TIER_BADGE: Record<HotelTier, string> = {
 };
 
 const usd = (n: number) => `$${n.toLocaleString("en-US")}`;
+
+/** Veri setindeki (Türkçe) şehir adı → seçili dilde */
+const city = (name: string, locale: Locale) => cityName({ city: name }, locale);
 
 function scoreTone(score: number) {
   if (score >= 90) return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300";
@@ -91,8 +94,9 @@ function HotelImage({ hotel }: { hotel: Hotel }) {
 
 /** Üstteki algoritma özeti: "X mekana göre en verimli plan: Y Gün A, ardından [Taşıt] ile Z Gün B" */
 function PlanSummaryBanner({ plan }: { plan: TripPlan }) {
+  const t = useT();
   const [first, ...rest] = plan.cities;
-  const forward = plan.transfers.filter((t) => !t.isReturn);
+  const forward = plan.transfers.filter((x) => !x.isReturn);
 
   return (
     <div className="relative overflow-hidden rounded-3xl border border-blue-500/30 bg-gradient-to-br from-blue-500/10 via-indigo-500/10 to-indigo-500/10 p-5 md:p-6">
@@ -102,34 +106,32 @@ function PlanSummaryBanner({ plan }: { plan: TripPlan }) {
         </span>
         <div className="min-w-0 space-y-3">
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-700 dark:text-blue-300">
-            Akıllı Algoritma Özeti
+            {t("h.algoTitle")}
           </p>
           <p className="text-sm leading-relaxed text-ink/80 md:text-base">
-            Seçtiğin <b className="text-ink">{plan.totalPlaces} mekana</b> göre en verimli plan:{" "}
-            <b className="text-ink">
-              {first.days} Gün {first.city}
-            </b>{" "}
-            konaklaması
-            {rest.map((city, i) => (
-              <span key={city.city}>
-                , ardından <b className="text-ink">{forward[i]?.name ?? "tren"}</b> ile geçip{" "}
-                <b className="text-ink">
-                  {city.days} Gün {city.city}
-                </b>{" "}
-                konaklaması
+            {t("h.planIntro", { n: plan.totalPlaces })}{" "}
+            <b className="text-ink">{t("h.stay", { days: first.days, city: city(first.city, t.locale) })}</b>
+            {t("h.staySuffix")}
+            {rest.map((c, i) => (
+              <span key={c.city}>
+                {t("h.then")}
+                <b className="text-ink">{forward[i] ? transferName(t.locale, forward[i].name) : t("mode.train")}</b>
+                {t("h.via")}
+                <b className="text-ink">{t("h.stay", { days: c.days, city: city(c.city, t.locale) })}</b>
+                {t("h.staySuffix")}
               </span>
             ))}
-            dır.
+            {t("h.end")}
           </p>
 
           {/* Zaman çizelgesi */}
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            {plan.cities.map((city, i) => (
-              <span key={city.city} className="flex items-center gap-2">
+            {plan.cities.map((c, i) => (
+              <span key={c.city} className="flex items-center gap-2">
                 {i > 0 && forward[i - 1] && <TransferChip transfer={forward[i - 1]} />}
                 <span className="glass rounded-full px-3 py-1.5 font-medium text-ink">
-                  Gün {city.dayStart}
-                  {city.dayEnd > city.dayStart ? `–${city.dayEnd}` : ""} · {city.city}
+                  {t("h.dayRange", { range: c.dayEnd > c.dayStart ? `${c.dayStart}–${c.dayEnd}` : c.dayStart })} ·{" "}
+                  {city(c.city, t.locale)}
                 </span>
               </span>
             ))}
@@ -143,11 +145,12 @@ function PlanSummaryBanner({ plan }: { plan: TripPlan }) {
 const TRANSFER_ICON: Record<IntercityTransfer["mode"], LucideIcon> = { train: TrainFront, bus: Bus, flight: Plane };
 
 function TransferChip({ transfer }: { transfer: IntercityTransfer }) {
+  const t = useT();
   const Icon = TRANSFER_ICON[transfer.mode];
   return (
     <span className="flex items-center gap-1.5 rounded-full bg-rose-500/12 px-2.5 py-1.5 font-medium text-rose-700 dark:text-rose-300">
       <Icon size={12} />
-      {formatMinutes(transfer.minutes)} · {usd(transfer.cost)}
+      {formatMinutes(transfer.minutes, t.locale)} · {usd(transfer.cost)}
       <ArrowRight size={11} />
     </span>
   );
@@ -165,6 +168,8 @@ function HotelCard({
   /** Liste sırası: kartlar dalga halinde sırayla gelir */
   index: number;
 }) {
+  const t = useT();
+  const intl = intlLocale(t.locale);
   const { hotel, score, avgDistanceKm } = evaluation;
   const travelers = useTripStore((s) => s.travelers);
   const rooms = roomsFor(travelers);
@@ -188,12 +193,12 @@ function HotelCard({
         <HotelImage hotel={hotel} />
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent" />
         <span className={cn("absolute left-3 top-3 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-semibold", TIER_BADGE[hotel.tier])}>
-          {HOTEL_TIER_META[hotel.tier].label}
+          {t(`tier.${hotel.tier}`)}
         </span>
         <span className="absolute bottom-3 left-3 flex items-center gap-1 rounded-lg bg-white/95 px-2 py-1 text-xs font-bold text-slate-900">
           <Star size={12} className="fill-amber-400 text-amber-400" />
           {hotel.rating.toFixed(1)}/10
-          <span className="font-normal text-slate-500">({hotel.reviewCount.toLocaleString("tr-TR")})</span>
+          <span className="font-normal text-slate-500">({hotel.reviewCount.toLocaleString(intl)})</span>
         </span>
         <AnimatePresence>
           {chosen && (
@@ -213,12 +218,13 @@ function HotelCard({
         <div>
           <h3 className="font-semibold leading-snug text-ink">{hotel.name}</h3>
           <p className="mt-0.5 flex items-center gap-1 text-xs text-ink/55">
-            <MapPin size={11} /> {hotel.area} · mekanlara ort. {avgDistanceKm.toLocaleString("tr-TR")} km
+            <MapPin size={11} /> {areaLabel(t.locale, hotel.area)} · {t("h.avgToPlaces", { km: avgDistanceKm.toLocaleString(intl) })}
           </p>
         </div>
 
         <span className={cn("flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold", scoreTone(score))}>
-          <Target size={12} />%{score} Rotana Uygun
+          <Target size={12} />
+          {t("g.routeFit", { n: score })}
         </span>
 
         <div className="flex flex-wrap gap-1.5">
@@ -233,15 +239,15 @@ function HotelCard({
           <div>
             {travelers > 1 && (
               <p className="text-[11px] font-semibold text-ink/60">
-                {travelers} Yetişkin ({rooms} Oda) • Gecelik Toplam {usd(nightly)}
+                {t("h.paxRooms", { n: travelers, rooms, price: usd(nightly) })}
               </p>
             )}
             <p className="font-mono text-lg font-bold tabular-nums text-ink">
               {usd(nightly)}
-              <span className="text-xs font-normal text-ink/50"> / gece</span>
+              <span className="text-xs font-normal text-ink/50"> {t("unit.perNight")}</span>
             </p>
             <p className="flex items-center gap-1 text-[11px] text-ink/55">
-              <Moon size={10} /> {hotel.nights} Gece Toplamı: {usd(total)}
+              <Moon size={10} /> {t("h.nightsTotal", { n: hotel.nights, price: usd(total) })}
             </p>
           </div>
           <p className="font-mono text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-300">{usd(total)}</p>
@@ -252,7 +258,8 @@ function HotelCard({
 }
 
 /** Pro: otel → mekan hatlarının nokta atışı dökümü · Ücretsiz: bulanık önizleme + kilit */
-function TransitBreakdown({ plan, city, evaluation }: { plan: TripPlan; city: CityPlan; evaluation: HotelEvaluation }) {
+function TransitBreakdown({ plan, city: cityPlan, evaluation }: { plan: TripPlan; city: CityPlan; evaluation: HotelEvaluation }) {
+  const t = useT();
   const isPro = useTripStore((s) => s.isPro);
   const openUpgradeModal = useTripStore((s) => s.openUpgradeModal);
   const travelers = useTripStore((s) => s.travelers);
@@ -265,7 +272,7 @@ function TransitBreakdown({ plan, city, evaluation }: { plan: TripPlan; city: Ci
         <div>
           <h2 className="flex items-center gap-2 font-semibold text-ink">
             <TrainFrontTunnel size={17} className="text-indigo-600 dark:text-indigo-300" />
-            Nokta Atışı Metro/Tren Hatları & Görünmez Ulaşım Maliyetleri
+            {t("h.transitTitle")}
           </h2>
         </div>
         {isPro && (
@@ -277,7 +284,7 @@ function TransitBreakdown({ plan, city, evaluation }: { plan: TripPlan; city: Ci
 
       <div className={cn("divide-y divide-ink/[0.07]", !isPro && "pointer-events-none select-none blur-[6px]")} aria-hidden={!isPro}>
         {evaluation.legs.map((leg) => {
-          const place = city.places.find((p) => p.id === leg.placeId)!;
+          const place = cityPlan.places.find((p) => p.id === leg.placeId)!;
           const Icon = MODE_ICON[leg.mode];
           const meta = TRANSIT_MODE_META[leg.mode];
           return (
@@ -291,39 +298,41 @@ function TransitBreakdown({ plan, city, evaluation }: { plan: TripPlan; city: Ci
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-ink">{place.name}</p>
                 <p className="truncate text-xs text-ink/55">
-                  {meta.label} · {leg.line} · {leg.distanceKm.toLocaleString("tr-TR")} km
+                  {t(`mode.${leg.mode}`)}
+                  {leg.mode === "walk" ? "" : ` · ${leg.line}`} · {leg.distanceKm.toLocaleString(intlLocale(t.locale))} km
                 </p>
                 {leg.route && (
                   <p className="truncate text-[11px] font-medium" style={{ color: leg.route.color }}>
-                    {leg.route.from.name} ➔ {leg.route.to.name} · {leg.route.stops} durak · Her {leg.route.headwayMinutes} dk
+                    {leg.route.from.name} ➔ {leg.route.to.name} · {t("unit.stops", { n: leg.route.stops })} ·{" "}
+                    {t("unit.every", { n: leg.route.headwayMinutes })}
                   </p>
                 )}
               </div>
               <div className="text-right">
-                <p className="font-mono text-sm font-semibold tabular-nums text-ink">{formatMinutes(leg.minutes)}</p>
-                <p className="font-mono text-xs tabular-nums text-ink/55">{leg.cost ? `$${leg.cost.toFixed(2)}` : "Ücretsiz"}</p>
+                <p className="font-mono text-sm font-semibold tabular-nums text-ink">{formatMinutes(leg.minutes, t.locale)}</p>
+                <p className="font-mono text-xs tabular-nums text-ink/55">{leg.cost ? `$${leg.cost.toFixed(2)}` : t("common.free")}</p>
               </div>
             </div>
           );
         })}
 
-        {plan.transfers.map((t) => {
-          const Icon = TRANSFER_ICON[t.mode];
+        {plan.transfers.map((tf) => {
+          const Icon = TRANSFER_ICON[tf.mode];
           return (
-          <div key={`${t.from}-${t.to}`} className="flex items-center gap-3 bg-rose-500/[0.05] px-5 py-3">
+          <div key={`${tf.from}-${tf.to}`} className="flex items-center gap-3 bg-rose-500/[0.05] px-5 py-3">
             <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-rose-500 text-white">
               <Icon size={16} />
             </span>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-ink">
-                {t.from} ➔ {t.to}
-                {t.isReturn && <span className="ml-1.5 text-xs font-normal text-ink/50">(dönüş uçuşu için)</span>}
+                {city(tf.from, t.locale)} ➔ {city(tf.to, t.locale)}
+                {tf.isReturn && <span className="ml-1.5 text-xs font-normal text-ink/50">{t("itin.forReturn")}</span>}
               </p>
-              <p className="truncate text-xs text-ink/55">{t.name}</p>
+              <p className="truncate text-xs text-ink/55">{transferName(t.locale, tf.name)}</p>
             </div>
             <div className="text-right">
-              <p className="font-mono text-sm font-semibold tabular-nums text-ink">{formatMinutes(t.minutes)}</p>
-              <p className="font-mono text-xs tabular-nums text-ink/55">{usd(t.cost)}</p>
+              <p className="font-mono text-sm font-semibold tabular-nums text-ink">{formatMinutes(tf.minutes, t.locale)}</p>
+              <p className="font-mono text-xs tabular-nums text-ink/55">{usd(tf.cost)}</p>
             </div>
           </div>
           );
@@ -331,8 +340,8 @@ function TransitBreakdown({ plan, city, evaluation }: { plan: TripPlan; city: Ci
 
         <div className="flex items-center justify-between px-5 py-4 text-sm">
           <span className="text-ink/70">
-            {city.city} gidiş-dönüş: <b className="font-mono text-ink">${evaluation.transitCost.toFixed(2)}</b> · Tüm ulaşım
-            (kişi başı)
+            {t("h.roundTrip", { city: city(cityPlan.city, t.locale) })}{" "}
+            <b className="font-mono text-ink">${evaluation.transitCost.toFixed(2)}</b> · {t("h.allTransit")}
           </span>
           <span className="font-mono font-bold tabular-nums text-emerald-600 dark:text-emerald-300">
             {usd(perPerson)}
@@ -347,17 +356,14 @@ function TransitBreakdown({ plan, city, evaluation }: { plan: TripPlan; city: Ci
             <span className="mx-auto grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-amber-300 to-orange-500 text-white shadow-lg">
               <Lock size={18} />
             </span>
-            <p className="mt-3 font-semibold text-ink">Pro ile Kilidi Aç</p>
-            <p className="mt-1 text-xs text-ink/60">
-              Her mekana hangi hatla, kaç dakikada ve kaç dolara gideceğini gör; haritada renkli hatlar ve bilet etiketleri açılsın.
-             
-            </p>
+            <p className="mt-3 font-semibold text-ink">{t("g.unlock")}</p>
+            <p className="mt-1 text-xs text-ink/60">{t("h.lockText")}</p>
             <button
               type="button"
               onClick={openUpgradeModal}
               className="pointer-events-auto mt-4 inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_8px_30px_-8px_rgba(245,158,11,0.7)] hover:brightness-110"
             >
-              <Crown size={14} /> Pro&apos;yu Dene
+              <Crown size={14} /> {t("h.tryPro")}
             </button>
           </div>
         </div>
@@ -412,6 +418,7 @@ function HotelActionBar({ plan }: { plan: TripPlan }) {
 
 /** Adım 3: akıllı şehir bölüştürme, otel merkezi ve taşıt simülasyonu */
 export default function HotelTransitStep({ destination }: TripRoute) {
+  const t = useT();
   const selectedPlaces = useTripStore((s) => s.selectedPlaces);
   const recommendedHotels = useTripStore((s) => s.recommendedHotels);
   const focusedHotelId = useTripStore((s) => s.focusedHotelId);
@@ -439,7 +446,7 @@ export default function HotelTransitStep({ destination }: TripRoute) {
   if (plan.cities.length === 0) {
     return (
       <div className="absolute inset-0 grid place-items-center p-6 text-center text-sm text-ink/60">
-        Önce Adım 2&apos;de en az bir mekan seçmelisin.
+        {t("h.needPlace")}
       </div>
     );
   }
@@ -459,7 +466,7 @@ export default function HotelTransitStep({ destination }: TripRoute) {
           <div className="space-y-6 px-4 py-6 md:px-8 md:py-8">
             <header>
               <h1 className="text-2xl font-bold text-ink md:text-3xl">
-                {destination.flag} Rotana göre en ideal otel bölgesi
+                {destination.flag} {t("h.title")}
               </h1>
             </header>
 
@@ -467,12 +474,12 @@ export default function HotelTransitStep({ destination }: TripRoute) {
 
             {/* Şehir sekmeleri */}
             <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-              {plan.cities.map((city) => {
-                const active = city === activeCity;
-                const chosen = chosenEvaluation(city, recommendedHotels);
+              {plan.cities.map((c) => {
+                const active = c === activeCity;
+                const chosen = chosenEvaluation(c, recommendedHotels);
                 return (
                   <button
-                    key={city.city}
+                    key={c.city}
                     type="button"
                     onClick={() => chosen && setFocusedHotel(chosen.hotel.id)}
                     className={cn(
@@ -483,9 +490,9 @@ export default function HotelTransitStep({ destination }: TripRoute) {
                     )}
                   >
                     <span className="flex flex-col leading-tight">
-                      <span className="text-sm font-semibold">{city.city}</span>
+                      <span className="text-sm font-semibold">{city(c.city, t.locale)}</span>
                       <span className="text-[11px] text-ink/55">
-                        {city.days} gün · {city.places.length} mekan
+                        {t("unit.days", { n: c.days })} · {t("unit.places", { n: c.places.length })}
                       </span>
                     </span>
                     {active && <span className="h-2 w-2 rounded-full bg-blue-500" />}
@@ -497,14 +504,15 @@ export default function HotelTransitStep({ destination }: TripRoute) {
             {/* İdeal otel bölgesi */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-2xl border border-dashed border-ink/15 px-4 py-3 text-xs text-ink/60">
               <span className="flex items-center gap-1.5 font-medium text-ink">
-                <Target size={13} className="text-blue-600 dark:text-blue-300" /> İdeal Otel Bölgesi ({activeCity.city})
+                <Target size={13} className="text-blue-600 dark:text-blue-300" /> {t("h.idealArea", { city: city(activeCity.city, t.locale) })}
               </span>
               <span className="font-mono">
                 {activeCity.center[1].toFixed(4)}°, {activeCity.center[0].toFixed(4)}°
               </span>
-              <span>Merkezden mekanlara ort. {activeCity.idealAvgKm.toFixed(1)} km</span>
+              <span>{t("h.centerAvg", { km: activeCity.idealAvgKm.toFixed(1) })}</span>
               <span>
-                {activeCity.nights} gece · {activeCity.visitHours.toLocaleString("tr-TR")} saat gezi
+                {t("unit.nights", { n: activeCity.nights })} ·{" "}
+                {t("h.visitHours", { n: activeCity.visitHours.toLocaleString(intlLocale(t.locale)) })}
               </span>
             </div>
 
@@ -524,7 +532,7 @@ export default function HotelTransitStep({ destination }: TripRoute) {
             {activeEvaluation && <TransitBreakdown plan={plan} city={activeCity} evaluation={activeEvaluation} />}
 
             <p className="pb-1 text-center text-[10px] text-ink/35">
-              Otel fiyatları ve hatlar simülasyondur · Mesafeler: Turf.js · Fotoğraflar: Unsplash
+              {t("h.footer")}
             </p>
           </div>
         </div>
@@ -539,7 +547,7 @@ export default function HotelTransitStep({ destination }: TripRoute) {
           <div className="glass pointer-events-none absolute left-3 top-3 max-w-[70%] rounded-xl px-3 py-1.5 text-xs font-medium text-ink/80">
             <span className="flex items-center gap-1.5">
               <BedDouble size={13} className="shrink-0 text-indigo-500" />
-              <span className="truncate">{activeEvaluation?.hotel.name ?? activeCity.city}</span>
+              <span className="truncate">{activeEvaluation?.hotel.name ?? city(activeCity.city, t.locale)}</span>
             </span>
           </div>
           <div className="glass pointer-events-none absolute right-3 top-3 hidden flex-col gap-1 rounded-xl px-3 py-2 text-[11px] text-ink/75 sm:flex">
@@ -547,12 +555,12 @@ export default function HotelTransitStep({ destination }: TripRoute) {
               (Object.keys(TRANSIT_MODE_META) as TransitMode[]).map((m) => (
                 <span key={m} className="flex items-center gap-1.5">
                   <span className="h-1 w-4 rounded-full" style={{ background: TRANSIT_MODE_META[m].color }} />
-                  {TRANSIT_MODE_META[m].label}
+                  {t(`mode.${m}`)}
                 </span>
               ))
             ) : (
               <span className="flex items-center gap-1.5">
-                <Lock size={11} className="text-amber-500" /> Renkli hatlar Pro&apos;da
+                <Lock size={11} className="text-amber-500" /> {t("h.linesPro")}
               </span>
             )}
           </div>

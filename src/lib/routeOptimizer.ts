@@ -3,6 +3,7 @@ import { getHotelsForRegion } from "@/data/mockHotels";
 import { CITY_LINES } from "@/data/transitLines";
 import { HOURS_PER_DAY } from "@/data/mockPlaces";
 import { generateHotels, getDestinationProfile } from "@/lib/globalDiscovery";
+import { formatDurationLocale, translate, type Locale } from "@/lib/i18n";
 import type {
   Airport,
   Hotel,
@@ -49,7 +50,7 @@ interface CityTransitProfile {
 
 const DEFAULT_PROFILE: CityTransitProfile = {
   walkMaxKm: 1.3,
-  primary: { mode: "metro", line: "Şehir Metrosu", fare: 2, perKm: 0, speedKmh: 25 },
+  primary: { mode: "metro", line: "City Metro", fare: 2, perKm: 0, speedKmh: 25 },
 };
 
 /** Şehir içi ulaşım simülasyonu: gerçekçi hat adları ve tek yön bilet fiyatları (USD) */
@@ -57,15 +58,15 @@ const CITY_TRANSIT: Record<string, CityTransitProfile> = {
   Tokyo: { walkMaxKm: 1.3, primary: { mode: "metro", line: "Tokyo Metro / Toei", fare: 1.2, perKm: 0.08, speedKmh: 28 } },
   Kyoto: {
     walkMaxKm: 1.5,
-    primary: { mode: "bus", line: "Kyoto Şehir Otobüsü", fare: 1.6, perKm: 0, speedKmh: 15 },
-    long: { mode: "train", line: "JR Nara / Sagano Hattı", fare: 1.3, perKm: 0.12, speedKmh: 34, minKm: 3.5 },
+    primary: { mode: "bus", line: "Kyoto City Bus", fare: 1.6, perKm: 0, speedKmh: 15 },
+    long: { mode: "train", line: "JR Nara / Sagano Line", fare: 1.3, perKm: 0.12, speedKmh: 34, minKm: 3.5 },
   },
   Roma: { walkMaxKm: 1.4, primary: { mode: "metro", line: "Metro A/B · Tram 8", fare: 1.65, perKm: 0, speedKmh: 20 } },
   Floransa: { walkMaxKm: 1.8, primary: { mode: "tram", line: "T1/T2 Tramvay", fare: 1.85, perKm: 0, speedKmh: 16 } },
   Paris: { walkMaxKm: 1.3, primary: { mode: "metro", line: "Paris Métro", fare: 2.3, perKm: 0, speedKmh: 24 } },
   Nice: {
     walkMaxKm: 1.5,
-    primary: { mode: "tram", line: "Tramvay L1/L2", fare: 1.9, perKm: 0, speedKmh: 17 },
+    primary: { mode: "tram", line: "Tram L1/L2", fare: 1.9, perKm: 0, speedKmh: 17 },
     long: { mode: "bus", line: "Lignes d'Azur 82", fare: 1.9, perKm: 0, speedKmh: 24, minKm: 5 },
   },
   "New York": { walkMaxKm: 1.2, primary: { mode: "metro", line: "NYC Subway", fare: 2.9, perKm: 0, speedKmh: 26 } },
@@ -85,20 +86,20 @@ const CITY_TRANSIT: Record<string, CityTransitProfile> = {
   Berlin: { walkMaxKm: 1.3, primary: { mode: "metro", line: "U-Bahn / S-Bahn", fare: 3.8, perKm: 0, speedKmh: 28 } },
   Münih: { walkMaxKm: 1.3, primary: { mode: "metro", line: "MVG U-Bahn", fare: 4, perKm: 0, speedKmh: 28 } },
   Amsterdam: { walkMaxKm: 1.5, primary: { mode: "tram", line: "GVB Tramvay", fare: 3.6, perKm: 0, speedKmh: 16 } },
-  Atina: { walkMaxKm: 1.4, primary: { mode: "metro", line: "Atina Metrosu", fare: 1.3, perKm: 0, speedKmh: 26 } },
+  Atina: { walkMaxKm: 1.4, primary: { mode: "metro", line: "Athens Metro", fare: 1.3, perKm: 0, speedKmh: 26 } },
   Lizbon: { walkMaxKm: 1.2, primary: { mode: "tram", line: "Carris Tram 28 / Metro", fare: 2, perKm: 0, speedKmh: 15 } },
   Prag: { walkMaxKm: 1.5, primary: { mode: "tram", line: "DPP Tramvay", fare: 1.4, perKm: 0, speedKmh: 18 } },
   Viyana: { walkMaxKm: 1.4, primary: { mode: "metro", line: "Wiener Linien U-Bahn", fare: 2.6, perKm: 0, speedKmh: 27 } },
   Budapeşte: { walkMaxKm: 1.4, primary: { mode: "metro", line: "BKV Metro / Tram 2", fare: 1.1, perKm: 0, speedKmh: 24 } },
-  Zürih: { walkMaxKm: 1.5, primary: { mode: "tram", line: "VBZ Tramvay", fare: 3.2, perKm: 0, speedKmh: 18 } },
+  Zürih: { walkMaxKm: 1.5, primary: { mode: "tram", line: "VBZ Tram", fare: 3.2, perKm: 0, speedKmh: 18 } },
   Bangkok: { walkMaxKm: 1, primary: { mode: "metro", line: "BTS Skytrain / MRT", fare: 0.9, perKm: 0.08, speedKmh: 28 } },
   Singapur: { walkMaxKm: 1.2, primary: { mode: "metro", line: "SMRT MRT", fare: 1, perKm: 0.06, speedKmh: 32 } },
   Pekin: { walkMaxKm: 1.2, primary: { mode: "metro", line: "Beijing Subway", fare: 0.5, perKm: 0.03, speedKmh: 32 } },
   Şanghay: { walkMaxKm: 1.2, primary: { mode: "metro", line: "Shanghai Metro", fare: 0.5, perKm: 0.03, speedKmh: 32 } },
   Hanoi: { walkMaxKm: 1.2, primary: { mode: "bus", line: "Hanoi Bus / Grab", fare: 0.4, perKm: 0.25, speedKmh: 14 } },
   "Yeni Delhi": { walkMaxKm: 1, primary: { mode: "metro", line: "Delhi Metro", fare: 0.4, perKm: 0.02, speedKmh: 32 } },
-  Kahire: { walkMaxKm: 1, primary: { mode: "metro", line: "Kahire Metrosu", fare: 0.2, perKm: 0, speedKmh: 28 } },
-  Dubai: { walkMaxKm: 1, primary: { mode: "metro", line: "Dubai Metro (Kırmızı/Yeşil)", fare: 1.4, perKm: 0.08, speedKmh: 40 } },
+  Kahire: { walkMaxKm: 1, primary: { mode: "metro", line: "Cairo Metro", fare: 0.2, perKm: 0, speedKmh: 28 } },
+  Dubai: { walkMaxKm: 1, primary: { mode: "metro", line: "Dubai Metro (Red/Green)", fare: 1.4, perKm: 0.08, speedKmh: 40 } },
   Meksiko: { walkMaxKm: 1.2, primary: { mode: "metro", line: "Metro CDMX", fare: 0.3, perKm: 0, speedKmh: 26 } },
   Toronto: { walkMaxKm: 1.3, primary: { mode: "metro", line: "TTC Subway", fare: 2.4, perKm: 0, speedKmh: 26 } },
   Montreal: { walkMaxKm: 1.3, primary: { mode: "metro", line: "STM Métro", fare: 2.6, perKm: 0, speedKmh: 26 } },
@@ -110,39 +111,39 @@ const CITY_TRANSIT: Record<string, CityTransitProfile> = {
 
 /** Şehirler arası geçişler (çift yönlü, kişi başı USD) */
 const INTERCITY: { a: string; b: string; mode: IntercityTransfer["mode"]; name: string; minutes: number; cost: number }[] = [
-  { a: "Tokyo", b: "Kyoto", mode: "train", name: "Shinkansen Hızlı Treni", minutes: 135, cost: 95 },
-  { a: "Roma", b: "Floransa", mode: "train", name: "Frecciarossa Hızlı Treni", minutes: 95, cost: 45 },
-  { a: "Paris", b: "Nice", mode: "train", name: "TGV INOUI Hızlı Treni", minutes: 345, cost: 85 },
-  { a: "New York", b: "Washington D.C.", mode: "train", name: "Amtrak Acela Treni", minutes: 175, cost: 120 },
-  { a: "Seul", b: "Busan", mode: "train", name: "KTX Hızlı Treni", minutes: 155, cost: 45 },
+  { a: "Tokyo", b: "Kyoto", mode: "train", name: "Shinkansen", minutes: 135, cost: 95 },
+  { a: "Roma", b: "Floransa", mode: "train", name: "Frecciarossa", minutes: 95, cost: 45 },
+  { a: "Paris", b: "Nice", mode: "train", name: "TGV INOUI", minutes: 345, cost: 85 },
+  { a: "New York", b: "Washington D.C.", mode: "train", name: "Amtrak Acela", minutes: 175, cost: 120 },
+  { a: "Seul", b: "Busan", mode: "train", name: "KTX", minutes: 155, cost: 45 },
   // Küresel havuz
-  { a: "Barselona", b: "Madrid", mode: "train", name: "AVE Hızlı Treni", minutes: 150, cost: 60 },
-  { a: "Londra", b: "Edinburgh", mode: "train", name: "LNER Azuma Treni", minutes: 270, cost: 75 },
+  { a: "Barselona", b: "Madrid", mode: "train", name: "AVE", minutes: 150, cost: 60 },
+  { a: "Londra", b: "Edinburgh", mode: "train", name: "LNER Azuma", minutes: 270, cost: 75 },
   { a: "Berlin", b: "Münih", mode: "train", name: "ICE Sprinter", minutes: 240, cost: 70 },
   { a: "Amsterdam", b: "Rotterdam", mode: "train", name: "NS Intercity Direct", minutes: 40, cost: 17 },
-  { a: "Atina", b: "Santorini", mode: "flight", name: "Aegean İç Hat Uçuşu", minutes: 50, cost: 75 },
-  { a: "Lizbon", b: "Porto", mode: "train", name: "Alfa Pendular Treni", minutes: 175, cost: 35 },
-  { a: "Prag", b: "Český Krumlov", mode: "bus", name: "RegioJet Otobüsü", minutes: 180, cost: 10 },
+  { a: "Atina", b: "Santorini", mode: "flight", name: "Aegean Airlines", minutes: 50, cost: 75 },
+  { a: "Lizbon", b: "Porto", mode: "train", name: "Alfa Pendular", minutes: 175, cost: 35 },
+  { a: "Prag", b: "Český Krumlov", mode: "bus", name: "RegioJet Bus", minutes: 180, cost: 10 },
   { a: "Viyana", b: "Salzburg", mode: "train", name: "ÖBB Railjet", minutes: 150, cost: 40 },
   { a: "Zürih", b: "Luzern", mode: "train", name: "SBB InterRegio", minutes: 45, cost: 30 },
-  { a: "Dubrovnik", b: "Split", mode: "bus", name: "FlixBus Sahil Hattı", minutes: 270, cost: 25 },
-  { a: "Tiflis", b: "Batum", mode: "train", name: "Stadler Ekspres Treni", minutes: 330, cost: 15 },
-  { a: "Bangkok", b: "Phuket", mode: "flight", name: "Thai AirAsia İç Hat", minutes: 85, cost: 55 },
-  { a: "Ubud", b: "Seminyak", mode: "bus", name: "Kura-Kura Shuttle / Şoförlü Araç", minutes: 75, cost: 12 },
-  { a: "Hanoi", b: "Ho Chi Minh", mode: "flight", name: "Vietnam Airlines İç Hat", minutes: 130, cost: 65 },
-  { a: "Pekin", b: "Şanghay", mode: "train", name: "Fuxing Hızlı Treni", minutes: 270, cost: 90 },
+  { a: "Dubrovnik", b: "Split", mode: "bus", name: "FlixBus Coastal", minutes: 270, cost: 25 },
+  { a: "Tiflis", b: "Batum", mode: "train", name: "Stadler Express", minutes: 330, cost: 15 },
+  { a: "Bangkok", b: "Phuket", mode: "flight", name: "Thai AirAsia", minutes: 85, cost: 55 },
+  { a: "Ubud", b: "Seminyak", mode: "bus", name: "Kura-Kura Shuttle / Private Driver", minutes: 75, cost: 12 },
+  { a: "Hanoi", b: "Ho Chi Minh", mode: "flight", name: "Vietnam Airlines", minutes: 130, cost: 65 },
+  { a: "Pekin", b: "Şanghay", mode: "train", name: "Fuxing Hao", minutes: 270, cost: 90 },
   { a: "Yeni Delhi", b: "Agra", mode: "train", name: "Gatimaan Express", minutes: 100, cost: 12 },
-  { a: "Agra", b: "Jaipur", mode: "train", name: "Ajmer Shatabdi Ekspres", minutes: 240, cost: 10 },
-  { a: "Yeni Delhi", b: "Jaipur", mode: "train", name: "Vande Bharat Ekspres", minutes: 270, cost: 14 },
-  { a: "Sidney", b: "Melbourne", mode: "flight", name: "Qantas İç Hat", minutes: 95, cost: 85 },
-  { a: "Dubai", b: "Abu Dabi", mode: "bus", name: "RTA E101 Otobüsü", minutes: 120, cost: 7 },
-  { a: "Amman", b: "Petra", mode: "bus", name: "JETT Otobüsü", minutes: 210, cost: 15 },
-  { a: "Kahire", b: "Luksor", mode: "flight", name: "EgyptAir İç Hat", minutes: 70, cost: 75 },
-  { a: "Marakeş", b: "Fes", mode: "train", name: "ONCF Ekspres Treni", minutes: 420, cost: 35 },
+  { a: "Agra", b: "Jaipur", mode: "train", name: "Ajmer Shatabdi Express", minutes: 240, cost: 10 },
+  { a: "Yeni Delhi", b: "Jaipur", mode: "train", name: "Vande Bharat Express", minutes: 270, cost: 14 },
+  { a: "Sidney", b: "Melbourne", mode: "flight", name: "Qantas", minutes: 95, cost: 85 },
+  { a: "Dubai", b: "Abu Dabi", mode: "bus", name: "RTA E101 Bus", minutes: 120, cost: 7 },
+  { a: "Amman", b: "Petra", mode: "bus", name: "JETT Bus", minutes: 210, cost: 15 },
+  { a: "Kahire", b: "Luksor", mode: "flight", name: "EgyptAir", minutes: 70, cost: 75 },
+  { a: "Marakeş", b: "Fes", mode: "train", name: "ONCF Express", minutes: 420, cost: 35 },
   { a: "Rio de Janeiro", b: "São Paulo", mode: "flight", name: "Ponte Aérea (LATAM)", minutes: 60, cost: 70 },
-  { a: "Meksiko", b: "Cancún", mode: "flight", name: "Aeroméxico İç Hat", minutes: 135, cost: 80 },
+  { a: "Meksiko", b: "Cancún", mode: "flight", name: "Aeroméxico", minutes: 135, cost: 80 },
   { a: "Toronto", b: "Montreal", mode: "train", name: "VIA Rail Corridor", minutes: 300, cost: 70 },
-  { a: "Lima", b: "Cusco", mode: "flight", name: "LATAM İç Hat", minutes: 85, cost: 95 },
+  { a: "Lima", b: "Cusco", mode: "flight", name: "LATAM", minutes: 85, cost: 95 },
 ];
 
 /** Bu mesafenin (km) üzerindeki bilinmeyen şehir çiftleri iç hat uçuşuyla bağlanır */
@@ -221,7 +222,7 @@ function hashOf(seed: string): number {
 const walkMinutes = (distKm: number) => Math.max(1, Math.round(((distKm * ROUTE_FACTOR) / WALK_SPEED_KMH) * 60));
 const lerp = (a: LngLat, b: LngLat, t: number): LngLat => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
 
-type RouteCore = Omit<TransitRoute, "steps" | "stationWord" | "waitMinutes" | "walkToMinutes" | "walkFromMinutes">;
+type RouteCore = Omit<TransitRoute, "waitMinutes" | "walkToMinutes" | "walkFromMinutes">;
 
 /** Otel ve mekana en yakın istasyonları AYNI hat üzerinde arar (gerçek hat verisi olan şehirler) */
 function realLineRoute(hotel: Hotel, place: Place, directKm: number, mode: RideMode): RouteCore | null {
@@ -286,9 +287,9 @@ function syntheticRoute(hotel: Hotel, place: Place, option: TransitOption, direc
   const toCoords = lerp(place.coordinates, hotel.coordinates, t);
   const rideKm = km(fromCoords, toCoords) * ROUTE_FACTOR;
   const stops = Math.max(1, Math.round(rideKm / SYNTHETIC_STOP_KM[option.mode]));
-  const area = hotel.area.replace(/\s+çevresi$/i, "").split(/[,·/]/)[0].trim() || hotel.cityRegion;
+  const area = hotel.area.replace(/\s+(çevresi|merkez)$/i, "").split(/[,·/]/)[0].trim() || hotel.cityRegion;
   const to = place.name.split(/[(,]/)[0].trim();
-  const line = option.mode === "bus" ? `${option.line} · ${100 + (seed % 280)} Numaralı Hat` : option.line;
+  const line = option.mode === "bus" ? `${option.line} ${100 + (seed % 280)}` : option.line;
   return {
     line,
     colorName,
@@ -304,22 +305,12 @@ function syntheticRoute(hotel: Hotel, place: Place, option: TransitOption, direc
   };
 }
 
-function finishRoute(core: RouteCore, hotel: Hotel, place: Place, mode: RideMode): TransitRoute {
-  const walkToMinutes = walkMinutes(km(hotel.coordinates, core.from.coordinates));
-  const walkFromMinutes = walkMinutes(km(core.to.coordinates, place.coordinates));
-  const stationWord = mode === "bus" ? "Durağı" : "İstasyonu";
+function finishRoute(core: RouteCore, hotel: Hotel, place: Place): TransitRoute {
   return {
     ...core,
-    stationWord,
-    walkToMinutes,
+    walkToMinutes: walkMinutes(km(hotel.coordinates, core.from.coordinates)),
     waitMinutes: Math.ceil(core.headwayMinutes / 2),
-    walkFromMinutes,
-    steps: [
-      `Otelden ${walkToMinutes} dk yürü ➔ ${core.from.name} ${stationWord}`,
-      `${core.from.name} ${stationWord}ndan ${core.line} ile ${core.direction} yönüne bin`,
-      `${core.stops} durak sonra ${core.to.name} ${stationWord}nda in`,
-      `${walkFromMinutes} dk yürü ➔ ${place.name}`,
-    ],
+    walkFromMinutes: walkMinutes(km(core.to.coordinates, place.coordinates)),
   };
 }
 
@@ -343,7 +334,7 @@ export function planLeg(hotel: Hotel, place: Place): TransitLeg {
   const option = profile.long && d >= profile.long.minKm ? profile.long : profile.primary;
   // Gerçek hat verisi sadece şehrin ana raylı sisteminde kullanılır (otobüs / banliyö hattı sentetik)
   const real = option === profile.primary && option.mode !== "bus" ? realLineRoute(hotel, place, d, option.mode) : null;
-  const route = finishRoute(real ?? syntheticRoute(hotel, place, option, d), hotel, place, option.mode);
+  const route = finishRoute(real ?? syntheticRoute(hotel, place, option, d), hotel, place);
   return {
     placeId: place.id,
     mode: option.mode,
@@ -355,15 +346,32 @@ export function planLeg(hotel: Hotel, place: Place): TransitLeg {
   };
 }
 
-/** "Her 4 dk'da bir • İlk sefer 05:30" */
-export function formatFrequency(route: TransitRoute): string {
-  const first = /^\d/.test(route.firstDeparture) ? `İlk sefer ${route.firstDeparture}` : route.firstDeparture;
-  return `Her ${route.headwayMinutes} dk'da bir • ${first}`;
+/** "Shibuya İstasyonu" / "Shibuya Station" / "渋谷駅" (otobüste durak) */
+export function stationLabel(locale: Locale, mode: TransitMode, name: string): string {
+  return translate(locale, mode === "bus" ? "st.stop" : "st.station", { name });
 }
 
-/** Yürüyüş ayağı dahil her ayak için adım adım tarif */
-export function legSteps(leg: TransitLeg, place: Place): string[] {
-  return leg.route?.steps ?? [`Otelden ${leg.minutes} dk yürü ➔ ${place.name}`];
+/** "Her 4 dk'da bir • İlk sefer 05:30" (seçili dilde) */
+export function formatFrequency(route: TransitRoute, locale: Locale): string {
+  const first = /^\d/.test(route.firstDeparture)
+    ? translate(locale, "unit.firstDeparture", { time: route.firstDeparture })
+    : route.firstDeparture;
+  return `${translate(locale, "unit.every", { n: route.headwayMinutes })} • ${first}`;
+}
+
+/** Yürüyüş ayağı dahil her ayak için adım adım tarif (seçili dilde) */
+export function legSteps(leg: TransitLeg, place: Place, locale: Locale): string[] {
+  const route = leg.route;
+  const min = (m: number) => formatDurationLocale(locale, m);
+  if (!route) return [translate(locale, "rs.walkTo", { min: min(leg.minutes), to: place.name })];
+  const from = stationLabel(locale, leg.mode, route.from.name);
+  const to = stationLabel(locale, leg.mode, route.to.name);
+  return [
+    translate(locale, "rs.walkTo", { min: min(route.walkToMinutes), to: from }),
+    translate(locale, "rs.board", { station: from, line: route.line, dir: route.direction }),
+    translate(locale, "rs.alight", { n: route.stops, station: to }),
+    translate(locale, "rs.walkFrom", { min: min(route.walkFromMinutes), to: place.name }),
+  ];
 }
 
 /** Google Maps gerçek yol tarifi (ücretsiz URL şeması, API anahtarı yok) */
@@ -487,9 +495,6 @@ export function computeTransitCost(plan: TripPlan, chosen: Hotel[]): number {
   return Math.round(local + intercity);
 }
 
-export function formatMinutes(min: number): string {
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  if (!h) return `${m} dk`;
-  return m ? `${h} sa ${m} dk` : `${h} sa`;
+export function formatMinutes(min: number, locale: Locale): string {
+  return formatDurationLocale(locale, min);
 }

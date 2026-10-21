@@ -3,13 +3,16 @@ import { HOURS_PER_DAY } from "@/data/mockPlaces";
 import { chosenEvaluation, type TripPlan } from "@/lib/routeOptimizer";
 import type { Flight, Hotel, IntercityTransfer, LngLat, Place, TransitLeg } from "@/types/trip";
 
+/** Serbest zaman önerisi: metin seçili dilde `itin.noteExplore` / `itin.noteArrival` ile üretilir */
+export type FreeNote = "explore" | "arrival";
+
 /** Gün içi dilim: haftalık ders programı ızgarasının satırları (Sabah / Öğle / İkindi / Akşam) */
 export type DaySlot = "morning" | "noon" | "afternoon" | "evening";
 
 export const DAY_SLOTS: DaySlot[] = ["morning", "noon", "afternoon", "evening"];
 
 export const SLOT_META: Record<DaySlot, { label: string; emoji: string; range: string }> = {
-  morning: { label: "Sabah", emoji: "🌅", range: "09:00 - 12:00" },
+  morning: { label: "Sabah & Kahvaltı", emoji: "🌅", range: "09:00 - 12:00" },
   noon: { label: "Öğle & Lezzet", emoji: "☀️", range: "12:00 - 15:00" },
   afternoon: { label: "İkindi Keşfi", emoji: "🏛️", range: "15:00 - 18:30" },
   evening: { label: "Akşam & Gece", emoji: "🌙", range: "19:00 - 22:30" },
@@ -23,7 +26,7 @@ export type ItineraryItem = Timed &
     | { kind: "checkin"; hotel: Hotel }
     | { kind: "transfer"; transfer: IntercityTransfer }
     | { kind: "place"; place: Place; leg?: TransitLeg }
-    | { kind: "free"; note: string }
+    | { kind: "free"; note: FreeNote; city: string }
     | { kind: "departure"; flight: Flight | null }
   );
 
@@ -191,7 +194,8 @@ export function buildItinerary(
     if (d.items.length === 0 || (onlyArrival && d.day !== 1)) {
       d.items.push({
         kind: "free",
-        note: `Serbest zaman: ${d.city} sokaklarında ve yerel çarşılarda dolaş, otel çevresindeki kafeleri keşfet ya da dinlen.`,
+        note: "explore",
+        city: d.city,
         time: clock(10 * 60),
         slot: "morning",
       });
@@ -202,7 +206,8 @@ export function buildItinerary(
       if (evening > 21 * 60 + 30) continue;
       d.items.push({
         kind: "free",
-        note: "Otel çevresinde kısa bir akşam yürüyüşü ve ilk yerel akşam yemeği — jet-lag'i atlatmak için erken yat.",
+        note: "arrival",
+        city: d.city,
         time: clock(evening),
         slot: slotOf(evening),
       });

@@ -21,7 +21,7 @@ export interface TransitLineDef {
 export const CITY_LINES: Record<string, TransitLineDef[]> = {
   Tokyo: [
     {
-      name: "Ginza Hattı (G)",
+      name: "Ginza Line (G)",
       colorName: "Turuncu Hat",
       color: "#f39700",
       termini: ["Shibuya", "Asakusa"],
@@ -49,7 +49,7 @@ export const CITY_LINES: Record<string, TransitLineDef[]> = {
       ],
     },
     {
-      name: "Marunouchi Hattı (M)",
+      name: "Marunouchi Line (M)",
       colorName: "Kırmızı Hat",
       color: "#e60012",
       termini: ["Ikebukuro", "Ogikubo"],
@@ -77,7 +77,7 @@ export const CITY_LINES: Record<string, TransitLineDef[]> = {
       ],
     },
     {
-      name: "Hanzomon Hattı (Z)",
+      name: "Hanzomon Line (Z)",
       colorName: "Mor Hat",
       color: "#8f76d6",
       termini: ["Shibuya", "Oshiage (Skytree)"],
@@ -101,10 +101,10 @@ export const CITY_LINES: Record<string, TransitLineDef[]> = {
       ],
     },
     {
-      name: "JR Yamanote Hattı (JY)",
+      name: "JR Yamanote Line (JY)",
       colorName: "Açık Yeşil Hat",
       color: "#9acd32",
-      termini: ["Soto-mawari (Dış Daire)", "Uchi-mawari (İç Daire)"],
+      termini: ["Soto-mawari (Outer Loop)", "Uchi-mawari (Inner Loop)"],
       headway: 4,
       firstDeparture: "04:26",
       loop: true,
@@ -429,10 +429,10 @@ export const CITY_LINES: Record<string, TransitLineDef[]> = {
   ],
   Seul: [
     {
-      name: "Seoul Metro 2. Hat",
+      name: "Seoul Metro Line 2",
       colorName: "Yeşil Hat",
       color: "#00a84d",
-      termini: ["Dış Daire (Oeseon)", "İç Daire (Naeseon)"],
+      termini: ["Outer Loop (Oeseon)", "Inner Loop (Naeseon)"],
       headway: 3,
       firstDeparture: "05:30",
       loop: true,
@@ -461,7 +461,7 @@ export const CITY_LINES: Record<string, TransitLineDef[]> = {
       ],
     },
     {
-      name: "Seoul Metro 3. Hat",
+      name: "Seoul Metro Line 3",
       colorName: "Turuncu Hat",
       color: "#ef7c1c",
       termini: ["Daehwa", "Ogeum"],
@@ -483,7 +483,7 @@ export const CITY_LINES: Record<string, TransitLineDef[]> = {
       ],
     },
     {
-      name: "Seoul Metro 4. Hat",
+      name: "Seoul Metro Line 4",
       colorName: "Açık Mavi Hat",
       color: "#00a5de",
       termini: ["Danggogae", "Oido"],
@@ -500,13 +500,13 @@ export const CITY_LINES: Record<string, TransitLineDef[]> = {
         ["Sookmyung Women's Univ.", 126.9725, 37.5446],
         ["Samgakji", 126.9735, 37.5347],
         ["Sinyongsan", 126.9673, 37.5291],
-        ["Ichon (Ulusal Müze)", 126.9652, 37.5223],
+        ["Ichon (National Museum)", 126.9652, 37.5223],
       ],
     },
   ],
   Busan: [
     {
-      name: "Busan Metro 1. Hat",
+      name: "Busan Metro Line 1",
       colorName: "Turuncu Hat",
       color: "#f06a00",
       termini: ["Nopo", "Dadaepo Beach"],
@@ -526,7 +526,7 @@ export const CITY_LINES: Record<string, TransitLineDef[]> = {
       ],
     },
     {
-      name: "Busan Metro 2. Hat",
+      name: "Busan Metro Line 2",
       colorName: "Yeşil Hat",
       color: "#81bf48",
       termini: ["Yangsan", "Jangsan"],

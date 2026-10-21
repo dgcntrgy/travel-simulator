@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import { greatCircle } from "@turf/turf";
 import { DESTINATIONS } from "@/data/airports";
-import { formatDuration, getFlights } from "@/data/mockFlights";
+import { getFlights } from "@/data/mockFlights";
 import { CATEGORY_META, getPlacesForDestination } from "@/data/mockPlaces";
 import {
   TRANSIT_MODE_META,
@@ -15,7 +15,11 @@ import {
   directionsUrl,
   formatFrequency,
   formatMinutes,
+  legSteps,
+  stationLabel,
 } from "@/lib/routeOptimizer";
+import { cityName, formatDurationLocale, lineColorName } from "@/lib/i18n";
+import { useT, type T } from "@/lib/useI18n";
 import { hotelNightlyFor, useTripStore } from "@/store/useTripStore";
 import { cn } from "@/lib/cn";
 import type { Airport, Flight, Hotel, LngLat, Place, PlaceCategory, Theme, TransitLeg, TransitRoute } from "@/types/trip";
@@ -115,23 +119,25 @@ function htmlIcon(element: HTMLElement, size: number): L.DivIcon {
 /** Pinin altında sürekli yayılan çift halkalı radar dalgası */
 const RADAR_RINGS = '<span class="radar-ring"></span><span class="radar-ring radar-ring--late"></span>';
 
-function airportPin(airport: Airport, role: "origin" | "destination"): HTMLDivElement {
+function airportPin(airport: Airport, role: "origin" | "destination", t: T): HTMLDivElement {
   return el(
     `airport-pin airport-pin--${role}`,
     `<span class="airport-pin__dot">${RADAR_RINGS}</span>
-     <span class="airport-pin__label"><b>${airport.code}</b> ${airport.city}</span>`,
+     <span class="airport-pin__label"><b>${airport.code}</b> ${escapeHtml(cityName(airport, t.locale))}</span>`,
   );
 }
 
-function layoverBadge(flight: Flight): HTMLDivElement {
+function layoverBadge(flight: Flight, t: T): HTMLDivElement {
   const lay = flight.layover!;
   return el(
     "layover-badge",
     `<span class="layover-badge__ring"></span>
      <span class="layover-badge__dot"></span>
      <span class="layover-badge__card">
-       <span class="layover-badge__title">Aktarma · ${lay.airport.code}</span>
-       <span class="layover-badge__meta">${lay.airport.city} · ${formatDuration(lay.durationMinutes)} bekleme</span>
+       <span class="layover-badge__title">${escapeHtml(t("m.layover", { code: lay.airport.code }))}</span>
+       <span class="layover-badge__meta">${escapeHtml(
+         t("m.layoverWait", { city: cityName(lay.airport, t.locale), dur: formatDurationLocale(t.locale, lay.durationMinutes) }),
+       )}</span>
      </span>`,
   );
 }
@@ -154,14 +160,14 @@ function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
-function placePin(place: Place): HTMLDivElement {
+function placePin(place: Place, t: T): HTMLDivElement {
   const pin = el(
     `place-pin place-pin--${place.category}`,
     `${RADAR_RINGS}
      <span class="place-pin__pulse"></span>
      <span class="place-pin__body">${CATEGORY_ICON[place.category]}</span>
      <span class="place-pin__check">${CHECK_ICON}</span>
-     <span class="place-pin__label">${escapeHtml(place.name)}<small>${escapeHtml(place.cityRegion)}</small></span>`,
+     <span class="place-pin__label">${escapeHtml(place.name)}<small>${escapeHtml(cityName({ city: place.cityRegion }, t.locale))}</small></span>`,
   );
   pin.style.setProperty("--pin-color", CATEGORY_META[place.category].color);
   pin.setAttribute("role", "button");
@@ -173,60 +179,60 @@ const BED_ICON = svg(
   '<path d="M2 20v-8a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v8"/><path d="M4 10V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v4"/><path d="M12 4v6"/><path d="M2 18h20"/>',
 );
 
-function hotelPin(hotel: Hotel, state: "focused" | "chosen" | "option", travelers: number): HTMLDivElement {
+function hotelPin(hotel: Hotel, state: "focused" | "chosen" | "option", travelers: number, t: T): HTMLDivElement {
   const pin = el(
     `hotel-pin hotel-pin--${hotel.tier} is-${state}`,
     `${RADAR_RINGS}
      <span class="hotel-pin__halo"></span>
      <span class="hotel-pin__body">${BED_ICON}</span>
-     <span class="hotel-pin__label">${escapeHtml(hotel.name)}<small>$${hotelNightlyFor(hotel, travelers)} / gece</small></span>`,
+     <span class="hotel-pin__label">${escapeHtml(hotel.name)}<small>$${hotelNightlyFor(hotel, travelers)} ${escapeHtml(t("unit.perNight"))}</small></span>`,
   );
   pin.setAttribute("role", "button");
   pin.setAttribute("aria-label", hotel.name);
   return pin;
 }
 
-function transitLabel(leg: TransitLeg, color?: string): HTMLDivElement {
+function transitLabel(leg: TransitLeg, t: T, color?: string): HTMLDivElement {
   const meta = TRANSIT_MODE_META[leg.mode];
   const label = el(
     "transit-label",
-    `<span>${meta.emoji}</span><b>${formatMinutes(leg.minutes)}</b><span>${leg.cost ? `$${leg.cost.toFixed(2)}` : "Ücretsiz"}</span>`,
+    `<span>${meta.emoji}</span><b>${formatMinutes(leg.minutes, t.locale)}</b><span>${leg.cost ? `$${leg.cost.toFixed(2)}` : escapeHtml(t("common.free"))}</span>`,
   );
   label.style.setProperty("--leg-color", color ?? meta.color);
   return label;
 }
 
 /** Pro: hattın biniş/iniş noktasındaki parlayan istasyon pini */
-function stationPin(name: string, role: "Biniş" | "İniş", leg: TransitLeg, color: string): HTMLDivElement {
+function stationPin(name: string, role: string, leg: TransitLeg, color: string, t: T): HTMLDivElement {
   const pin = el(
     "station-pin",
     `<span class="station-pin__dot">${TRANSIT_MODE_META[leg.mode].emoji}</span>
-     <span class="station-pin__label">${role} · ${escapeHtml(name)}</span>`,
+     <span class="station-pin__label">${escapeHtml(role)} · ${escapeHtml(name)}</span>`,
   );
   pin.style.setProperty("--line-color", color);
   pin.setAttribute("role", "button");
-  pin.setAttribute("aria-label", `${role} istasyonu: ${name}`);
+  pin.setAttribute("aria-label", t("m.stationAria", { role, name: stationLabel(t.locale, leg.mode, name) }));
   return pin;
 }
 
 /** İstasyon pinine / hatta tıklayınca açılan yol tarifi kartı */
-function routePopupHtml(leg: TransitLeg, route: TransitRoute, hotel: Hotel, place: Place): string {
+function routePopupHtml(leg: TransitLeg, route: TransitRoute, hotel: Hotel, place: Place, t: T): string {
   const emoji = TRANSIT_MODE_META[leg.mode].emoji;
   const facts: [string, string][] = [
-    ["Biniş", `${route.from.name} ${route.stationWord}`],
-    ["İniş", `${route.to.name} ${route.stationWord}`],
-    ["Sefer", formatFrequency(route)],
-    ["Bilet", leg.cost ? `$${leg.cost.toFixed(2)} / kişi` : "Ücretsiz"],
-    ["Süre", `${formatMinutes(leg.minutes)} · ${route.stops} durak`],
+    [t("m.board"), stationLabel(t.locale, leg.mode, route.from.name)],
+    [t("m.alight"), stationLabel(t.locale, leg.mode, route.to.name)],
+    [t("m.freq"), formatFrequency(route, t.locale)],
+    [t("g.fTicket"), leg.cost ? t("g.perPersonPrice", { price: `$${leg.cost.toFixed(2)}` }) : t("common.free")],
+    [t("m.duration"), `${formatMinutes(leg.minutes, t.locale)} · ${t("unit.stops", { n: route.stops })}`],
   ];
   return `<div style="--line-color:${route.color}">
     <div class="metro-popup__head">
       <span class="metro-popup__badge">${emoji}</span>
-      <div><b>${escapeHtml(route.line)}</b><small>${escapeHtml(route.colorName)} · ${escapeHtml(route.direction)} yönü</small></div>
+      <div><b>${escapeHtml(route.line)}</b><small>${escapeHtml(lineColorName(t.locale, route.colorName))} · ${escapeHtml(t("g.direction", { dir: route.direction }))}</small></div>
     </div>
-    <dl class="metro-popup__facts">${facts.map(([k, v]) => `<dt>${k}</dt><dd>${escapeHtml(v)}</dd>`).join("")}</dl>
-    <ol class="metro-popup__steps">${route.steps.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ol>
-    <a class="metro-popup__link" href="${directionsUrl(hotel.coordinates, place.coordinates, leg.mode)}" target="_blank" rel="noopener noreferrer">📍 Haritada Yol Tarifi Al</a>
+    <dl class="metro-popup__facts">${facts.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join("")}</dl>
+    <ol class="metro-popup__steps">${legSteps(leg, place, t.locale).map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ol>
+    <a class="metro-popup__link" href="${directionsUrl(hotel.coordinates, place.coordinates, leg.mode)}" target="_blank" rel="noopener noreferrer">${escapeHtml(t("g.directions"))}</a>
   </div>`;
 }
 
@@ -280,6 +286,7 @@ export default function WorldMap({
   const [mapReady, setMapReady] = useState(false);
   const [overlayVisible, setOverlayVisible] = useState(true);
 
+  const t = useT();
   const theme = useTripStore((s) => s.theme);
   const travelers = useTripStore((s) => s.travelers);
   const origin = useTripStore((s) => s.origin);
@@ -393,9 +400,9 @@ export default function WorldMap({
         if (d.code === destination?.code || d.code === origin.code || d.city === origin.city) continue;
         const pin = el(
           "candidate-pin",
-          `<span class="candidate-pin__dot"></span><span class="candidate-pin__label">${d.flag} ${d.city}</span>`,
+          `<span class="candidate-pin__dot"></span><span class="candidate-pin__label">${d.flag} ${escapeHtml(cityName(d, t.locale))}</span>`,
         );
-        const marker = add(L.marker(toLatLng(d.coordinates), { icon: htmlIcon(pin, 9), title: d.city }));
+        const marker = add(L.marker(toLatLng(d.coordinates), { icon: htmlIcon(pin, 9), title: cityName(d, t.locale) }));
         marker.on("click", () => setDestination(d));
       }
     }
@@ -405,7 +412,7 @@ export default function WorldMap({
       const only = origin ?? destination;
       if (only) {
         const role = origin ? "origin" : "destination";
-        add(L.marker(toLatLng(only.coordinates), { icon: htmlIcon(airportPin(only, role), 14), interactive: false, keyboard: false }));
+        add(L.marker(toLatLng(only.coordinates), { icon: htmlIcon(airportPin(only, role, t), 14), interactive: false, keyboard: false }));
         map.flyTo(toLatLng(only.coordinates), 3, { duration: 1.4 });
       } else {
         map.flyTo(WORLD_VIEW.center, WORLD_VIEW.zoom, { duration: 1.2 });
@@ -494,10 +501,10 @@ export default function WorldMap({
     });
 
     // Kalkış & varış pinleri (yay uçlarına; antimeridyen açılımıyla tutarlı)
-    add(L.marker(start, { icon: htmlIcon(airportPin(origin, "origin"), 14), interactive: false, keyboard: false }));
+    add(L.marker(start, { icon: htmlIcon(airportPin(origin, "origin", t), 14), interactive: false, keyboard: false }));
     add(
       L.marker(end, {
-        icon: htmlIcon(airportPin(destination, "destination"), 14),
+        icon: htmlIcon(airportPin(destination, "destination", t), 14),
         interactive: false,
         keyboard: false,
       }),
@@ -506,7 +513,7 @@ export default function WorldMap({
     // Aktarma rozeti: şehir + bekleme süresi (ilk yay çizilince belirir)
     let badgeEl: HTMLDivElement | null = null;
     if (isLayover && selectedFlight?.layover) {
-      badgeEl = layoverBadge(selectedFlight);
+      badgeEl = layoverBadge(selectedFlight, t);
       badgeEl.classList.add("is-hidden");
       add(
         L.marker(segments[0].at(-1)!, {
@@ -587,7 +594,7 @@ export default function WorldMap({
       cancelAnimationFrame(raf);
       layers.forEach((l) => l.remove());
     };
-  }, [mapReady, mode, theme, origin, destination, selectedFlight, flightOptions, setDestination]);
+  }, [mapReady, mode, theme, origin, destination, selectedFlight, flightOptions, setDestination, t]);
 
   // 3) Adım 2: şehre yakınlaş + kategori pinleri
   useEffect(() => {
@@ -604,7 +611,7 @@ export default function WorldMap({
     const pins = placePinsRef.current;
 
     for (const place of places) {
-      const pin = placePin(place);
+      const pin = placePin(place, t);
       const marker = L.marker(toLatLng(place.coordinates), { icon: htmlIcon(pin, 30), title: place.name }).addTo(map);
       marker.on("mouseover", () => setHoveredPlace(place.id, "map"));
       marker.on("mouseout", () => {
@@ -630,7 +637,7 @@ export default function WorldMap({
       pins.clear();
       setHoveredPlace(null);
     };
-  }, [mapReady, mode, destination, placesProp, setHoveredPlace]);
+  }, [mapReady, mode, destination, placesProp, setHoveredPlace, t]);
 
   // 4) Seçilen mekanlar: pin parıltısı + ince kesikli keşif rotası (ekleme sırasıyla)
   useEffect(() => {
@@ -686,10 +693,10 @@ export default function WorldMap({
     const active = chosenEvaluation(activeCity, recommendedHotels);
 
     // Şehirler arası geçiş: ağırlık merkezleri arasında kesikli tren hattı
-    for (const t of plan.transfers) {
-      if (t.isReturn) continue;
-      const from = plan.cities.find((c) => c.city === t.from)!;
-      const to = plan.cities.find((c) => c.city === t.to)!;
+    for (const tf of plan.transfers) {
+      if (tf.isReturn) continue;
+      const from = plan.cities.find((c) => c.city === tf.from)!;
+      const to = plan.cities.find((c) => c.city === tf.to)!;
       add(
         L.polyline([toLatLng(from.center), toLatLng(to.center)], {
           color: TRANSIT_MODE_META.train.color,
@@ -712,7 +719,7 @@ export default function WorldMap({
         const route = leg.route;
 
         if (isPro && route) {
-          const popup = routePopupHtml(leg, route, active.hotel, place);
+          const popup = routePopupHtml(leg, route, active.hotel, place, t);
           const popupOptions: L.PopupOptions = { className: "metro-popup", maxWidth: 280, minWidth: 260 };
           const linePath = route.path.map(toLatLng);
           // İstasyonlara yürüyüş bağlantıları (ince noktalı)
@@ -769,13 +776,13 @@ export default function WorldMap({
           );
           // Biniş & iniş istasyonu pinleri
           for (const [station, role] of [
-            [route.from, "Biniş"],
-            [route.to, "İniş"],
+            [route.from, t("m.board")],
+            [route.to, t("m.alight")],
           ] as const) {
             add(
               L.marker(toLatLng(station.coordinates), {
-                icon: htmlIcon(stationPin(station.name, role, leg, route.color), 24),
-                title: `${station.name} ${route.stationWord}`,
+                icon: htmlIcon(stationPin(station.name, role, leg, route.color, t), 24),
+                title: stationLabel(t.locale, leg.mode, station.name),
                 zIndexOffset: 700,
               }),
             ).bindPopup(popup, popupOptions);
@@ -784,7 +791,7 @@ export default function WorldMap({
           const next = linePath[Math.min(linePath.length - 1, Math.floor((linePath.length - 1) / 2) + 1)];
           add(
             L.marker([(mid[0] + next[0]) / 2, (mid[1] + next[1]) / 2], {
-              icon: htmlIcon(transitLabel(leg, route.color), 0),
+              icon: htmlIcon(transitLabel(leg, t, route.color), 0),
               interactive: false,
               keyboard: false,
               zIndexOffset: 400,
@@ -825,7 +832,7 @@ export default function WorldMap({
         }
         if (isPro) {
           const mid: L.LatLngTuple = [(path[0][0] + path[1][0]) / 2, (path[0][1] + path[1][1]) / 2];
-          add(L.marker(mid, { icon: htmlIcon(transitLabel(leg), 0), interactive: false, keyboard: false, zIndexOffset: 400 }));
+          add(L.marker(mid, { icon: htmlIcon(transitLabel(leg, t), 0), interactive: false, keyboard: false, zIndexOffset: 400 }));
         }
       }
     }
@@ -833,7 +840,7 @@ export default function WorldMap({
     // Mekan pinleri: aktif şehir parlak, diğer şehir(ler) soluk
     for (const city of plan.cities) {
       for (const place of city.places) {
-        const pin = placePin(place);
+        const pin = placePin(place, t);
         pin.classList.add("is-selected");
         if (city !== activeCity) pin.classList.add("is-muted");
         add(L.marker(toLatLng(place.coordinates), { icon: htmlIcon(pin, 30), title: place.name, keyboard: false }));
@@ -850,7 +857,7 @@ export default function WorldMap({
         const state = city === activeCity && isChosen ? "focused" : isChosen ? "chosen" : "option";
         const marker = add(
           L.marker(toLatLng(hotel.coordinates), {
-            icon: htmlIcon(hotelPin(hotel, state, travelers), state === "focused" ? 40 : 28),
+            icon: htmlIcon(hotelPin(hotel, state, travelers, t), state === "focused" ? 40 : 28),
             title: hotel.name,
             zIndexOffset: state === "focused" ? 900 : 600,
           }),
@@ -869,7 +876,7 @@ export default function WorldMap({
     }
 
     return () => layers.forEach((l) => l.remove());
-  }, [mapReady, mode, theme, isPro, plan, focusedHotelId, recommendedHotels, chooseHotel, travelers]);
+  }, [mapReady, mode, theme, isPro, plan, focusedHotelId, recommendedHotels, chooseHotel, travelers, t]);
 
   return (
     <div className={cn("relative overflow-hidden bg-[#e2e8f0] dark:bg-[#0D162B] print:hidden", className)}>
@@ -881,14 +888,14 @@ export default function WorldMap({
           className="absolute inset-x-0 bottom-9 z-[600] mx-auto flex w-fit max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-full border border-amber-400/50 bg-[#0a0d20]/85 px-4 py-2 text-left text-[11px] font-semibold leading-snug text-amber-100 shadow-[0_10px_30px_-10px_rgba(245,158,11,0.7)] backdrop-blur-xl transition hover:border-amber-300 hover:bg-[#0a0d20]/95 sm:text-xs"
         >
           <span aria-hidden>🔒</span>
-          <span>Parlak Metro Hatları, İstasyon Konumları ve Yol Tarifi için Pro&apos;ya Geçin</span>
+          <span>{t("m.proBanner")}</span>
         </button>
       )}
       {overlayVisible && (
         <div className="pointer-events-none absolute inset-0 z-[500] flex items-center justify-center">
           <div className="glass flex items-center gap-3 rounded-full px-5 py-2.5 text-sm text-ink/70">
             <span className="h-2 w-2 animate-ping rounded-full bg-blue-500" />
-            Harita yükleniyor…
+            {t("m.loading")}
           </div>
         </div>
       )}

@@ -30,8 +30,8 @@ import WorldMap from "@/components/map/WorldMap";
 import { CATEGORY_META, estimateTripDays, getRegions } from "@/data/mockPlaces";
 import { useDestinationPlaces } from "@/lib/useDestinationPlaces";
 import { fetchWikiImage } from "@/lib/wikipedia";
-import type { TranslationKey } from "@/lib/i18n";
-import { useT } from "@/lib/useI18n";
+import { cityName, countryName, intlLocale, type TranslationKey } from "@/lib/i18n";
+import { useT, type T } from "@/lib/useI18n";
 import { useTripStore } from "@/store/useTripStore";
 import { cn } from "@/lib/cn";
 import type { Place, PlaceCategory, TripRoute } from "@/types/trip";
@@ -49,6 +49,12 @@ const CATEGORY_FILTERS: { id: CategoryFilter; label: TranslationKey }[] = [
   { id: "culture", label: "places.catCulture" },
 ];
 
+const CATEGORY_LABEL: Record<PlaceCategory, TranslationKey> = {
+  sight: "places.catSight",
+  food: "places.catFood",
+  culture: "places.catCulture",
+};
+
 const CATEGORY_ICON: Record<PlaceCategory, LucideIcon> = {
   sight: Camera,
   food: UtensilsCrossed,
@@ -62,13 +68,16 @@ const CATEGORY_BADGE: Record<PlaceCategory, string> = {
   culture: "text-indigo-700",
 };
 
-function formatCost(cost: number) {
-  return cost === 0 ? "Ücretsiz" : `~$${cost}`;
+function formatCost(cost: number, t: T) {
+  return cost === 0 ? t("common.free") : `~$${cost}`;
 }
 
-function formatHours(hours: number) {
-  return `${hours.toLocaleString("tr-TR")} Saat`;
+function formatHours(hours: number, t: T) {
+  return t("unit.hours", { n: hours.toLocaleString(intlLocale(t.locale)) });
 }
+
+/** Veri setindeki (Türkçe) şehir adı → seçili dilde */
+const regionName = (region: string, t: T) => cityName({ city: region }, t.locale);
 
 function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
@@ -158,6 +167,7 @@ function RouteToggleButton({
   onToggle: () => void;
   className?: string;
 }) {
+  const t = useT();
   return (
     <motion.button
       type="button"
@@ -177,11 +187,11 @@ function RouteToggleButton({
     >
       {selected ? (
         <>
-          <Check size={15} /> Rotadan Çıkar
+          <Check size={15} /> {t("p.remove")}
         </>
       ) : (
         <>
-          <Plus size={15} /> Rotama Ekle
+          <Plus size={15} /> {t("p.add")}
         </>
       )}
     </motion.button>
@@ -207,6 +217,7 @@ function PlaceCard({
   /** Liste sırası: kartlar dalga halinde sırayla gelir */
   index: number;
 }) {
+  const t = useT();
   const Icon = CATEGORY_ICON[place.category];
 
   return (
@@ -237,11 +248,11 @@ function PlaceCard({
             CATEGORY_BADGE[place.category],
           )}
         >
-          <Icon size={12} /> {CATEGORY_META[place.category].short}
+          <Icon size={12} /> {t(`cat.${place.category}`)}
         </span>
         {place.source === "live" && (
           <span className="absolute bottom-3 left-3 flex items-center gap-1 rounded-full bg-blue-500/90 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
-            <Radio size={10} /> Canlı Wikipedia
+            <Radio size={10} /> {t("p.liveWiki")}
           </span>
         )}
 
@@ -265,7 +276,7 @@ function PlaceCard({
         <div>
           <h3 className="text-base font-semibold leading-snug text-ink">{place.name}</h3>
           <p className="mt-1 flex items-center gap-1 text-xs text-ink/55">
-            <MapPin size={12} /> {place.cityRegion} · {CATEGORY_META[place.category].label}
+            <MapPin size={12} /> {regionName(place.cityRegion, t)} · {t(CATEGORY_LABEL[place.category])}
           </p>
         </div>
 
@@ -278,10 +289,10 @@ function PlaceCard({
                 : "bg-ink/[0.05] text-ink/80",
             )}
           >
-            {formatCost(place.estimatedCost)}
+            {formatCost(place.estimatedCost, t)}
           </span>
           <span className="flex items-center gap-1 rounded-lg bg-ink/[0.05] px-2 py-1 text-ink/70">
-            <Clock size={12} /> {formatHours(place.recommendedDuration)}
+            <Clock size={12} /> {formatHours(place.recommendedDuration, t)}
           </span>
         </div>
 
@@ -294,7 +305,7 @@ function PlaceCard({
             }}
             className="flex items-center justify-center gap-1.5 rounded-xl glass-secondary py-2.5 text-sm font-medium text-ink/75 hover:border-blue-500/40! hover:bg-blue-500/[0.07] hover:text-ink"
           >
-            <Search size={14} /> Detay & Hikaye
+            <Search size={14} /> {t("p.details")}
           </button>
           <RouteToggleButton selected={selected} onToggle={onToggle} className="py-2.5" />
         </div>
@@ -315,6 +326,7 @@ function PlaceDetailModal({
   onToggle: () => void;
   onClose: () => void;
 }) {
+  const t = useT();
   const Icon = CATEGORY_ICON[place.category];
   const [lng, lat] = place.coordinates;
 
@@ -356,7 +368,7 @@ function PlaceDetailModal({
               type="button"
               autoFocus
               onClick={onClose}
-              aria-label="Kapat"
+              aria-label={t("common.close")}
               className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full bg-black/45 text-white backdrop-blur transition-colors hover:bg-black/65"
             >
               <X size={18} />
@@ -369,13 +381,13 @@ function PlaceDetailModal({
                   CATEGORY_BADGE[place.category],
                 )}
               >
-                <Icon size={12} /> {CATEGORY_META[place.category].label}
+                <Icon size={12} /> {t(CATEGORY_LABEL[place.category])}
               </span>
               <h2 id="place-detail-title" className="mt-2 text-2xl font-bold text-white sm:text-3xl">
                 {place.name}
               </h2>
               <p className="mt-1 flex items-center gap-1 text-sm text-white/80">
-                <MapPin size={14} /> {place.cityRegion}
+                <MapPin size={14} /> {regionName(place.cityRegion, t)}
               </p>
             </div>
           </div>
@@ -385,7 +397,7 @@ function PlaceDetailModal({
             <div className="space-y-5">
               <section>
                 <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-blue-600 dark:text-blue-300">
-                  <BookOpen size={13} /> Hikaye & Tarihçe
+                  <BookOpen size={13} /> {t("p.story")}
                 </h3>
                 <p className="text-[15px] leading-relaxed text-ink/80">{place.story}</p>
               </section>
@@ -393,7 +405,7 @@ function PlaceDetailModal({
               <section className="rounded-2xl border border-amber-500/25 bg-amber-500/[0.07] p-4">
                 <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-amber-700 dark:text-amber-200">
                   <Lightbulb size={13} />{" "}
-                  {place.category === "food" ? "Ne Yenir? / Lokal İpucu" : "Burada Ne Yapılır? / Lokal İpucu"}
+                  {place.category === "food" ? t("p.tipFood") : t("p.tipSight")}
                 </h3>
                 <p className="text-sm leading-relaxed text-ink/80">{place.mustDo}</p>
               </section>
@@ -404,7 +416,7 @@ function PlaceDetailModal({
                 rel="noreferrer"
                 className="inline-flex items-center gap-1 text-xs text-ink/50 underline-offset-2 hover:text-ink hover:underline"
               >
-                Wikipedia&apos;da devamını oku <ExternalLink size={11} />
+                {t("p.readMore")} <ExternalLink size={11} />
               </a>
             </div>
 
@@ -412,22 +424,22 @@ function PlaceDetailModal({
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-2xl border border-ink/10 bg-ink/[0.03] p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink/45">Ort. Maliyet</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink/45">{t("p.avgCost")}</p>
                   <p
                     className={cn(
                       "mt-1 font-mono text-lg font-semibold",
                       place.estimatedCost === 0 ? "text-emerald-600 dark:text-emerald-300" : "text-ink",
                     )}
                   >
-                    {formatCost(place.estimatedCost)}
+                    {formatCost(place.estimatedCost, t)}
                   </p>
-                  <p className="text-[10px] text-ink/40">kişi başı</p>
+                  <p className="text-[10px] text-ink/40">{t("common.perPerson")}</p>
                 </div>
                 <div className="rounded-2xl border border-ink/10 bg-ink/[0.03] p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink/45">Tahmini Süre</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink/45">{t("p.estDuration")}</p>
                   <p className="mt-1 flex items-center gap-1.5 text-lg font-semibold text-ink">
                     <Clock size={16} className="text-blue-600 dark:text-blue-300" />
-                    {formatHours(place.recommendedDuration)}
+                    {formatHours(place.recommendedDuration, t)}
                   </p>
                 </div>
               </div>
@@ -435,7 +447,7 @@ function PlaceDetailModal({
               <div>
                 <p className="mb-2 flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.14em] text-ink/45">
                   <span className="flex items-center gap-1">
-                    <MapPin size={11} /> Haritadaki Konumu
+                    <MapPin size={11} /> {t("p.mapLocation")}
                   </span>
                   <span className="font-mono normal-case tracking-normal text-ink/40">
                     {lat.toFixed(4)}, {lng.toFixed(4)}
@@ -454,7 +466,7 @@ function PlaceDetailModal({
             onClick={onClose}
             className="rounded-xl glass-secondary px-4 py-3 text-sm text-ink/70 hover:text-ink"
           >
-            Kapat
+            {t("common.close")}
           </button>
           <RouteToggleButton selected={selected} onToggle={onToggle} className="flex-1 py-3" />
         </div>
@@ -564,6 +576,7 @@ export default function PlaceDiscoveryStep({ destination }: TripRoute) {
   }, [selectedPlaces]);
 
   const totalCost = selectedPlaces.reduce((sum, p) => sum + p.estimatedCost, 0);
+  const where = regions.length ? regions.map((r) => regionName(r, t)).join(", ") : cityName(destination, t.locale);
   const days = estimateTripDays(selectedPlaces);
 
   // Haritada bir pine tıklanınca/üzerine gelinince ilgili kartı görünür alana kaydır
@@ -593,23 +606,23 @@ export default function PlaceDiscoveryStep({ destination }: TripRoute) {
             <header className="flex flex-wrap items-end justify-between gap-4">
               <div>
                 <h1 className="text-2xl font-bold text-ink md:text-3xl">
-                  {destination.flag} {destination.country}&apos;da neler var?
+                  {destination.flag} {t("p.title", { country: countryName(destination, t.locale) })}
                 </h1>
               </div>
               <div className="flex gap-2">
-                <span className="card flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm text-ink" title="Seçilen mekan">
+                <span className="card flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm text-ink" title={t("p.selectedTitle")}>
                   <MapPin size={14} className="text-amber-500" />
                   <span className="font-mono tabular-nums">{selectedPlaces.length}</span>
-                  <span className="text-ink/50">mekan</span>
+                  <span className="text-ink/50">{t("p.placesWord")}</span>
                 </span>
-                <span className="card flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm text-ink" title="Tahmini gezi günü">
+                <span className="card flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm text-ink" title={t("p.daysTitle")}>
                   <CalendarDays size={14} className="text-blue-600 dark:text-blue-300" />
                   <span className="font-mono tabular-nums">{days}</span>
-                  <span className="text-ink/50">gün</span>
+                  <span className="text-ink/50">{t("stats.days")}</span>
                 </span>
                 <span
                   className="card rounded-xl px-3 py-2 font-mono text-sm tabular-nums text-emerald-600 dark:text-emerald-300"
-                  title="Giriş & yemek toplamı (kişi başı)"
+                  title={t("p.costTitle")}
                 >
                   ${totalCost}
                 </span>
@@ -635,7 +648,7 @@ export default function PlaceDiscoveryStep({ destination }: TripRoute) {
                 </Chip>
                 {regions.map((r) => (
                   <Chip key={r} active={region === r} onClick={() => setRegion(r)}>
-                    {r}
+                    {regionName(r, t)}
                     {regionCounts.get(r) ? (
                       <span className="rounded-full bg-amber-500/20 px-1.5 font-mono text-[10px] text-amber-700 dark:text-amber-200">
                         {regionCounts.get(r)}
@@ -652,19 +665,19 @@ export default function PlaceDiscoveryStep({ destination }: TripRoute) {
                 {liveStatus === "loading" ? (
                   <>
                     <Loader2 size={14} className="shrink-0 animate-spin text-blue-600 dark:text-blue-400" />
-                    Wikipedia GeoSearch ile {regions.length ? regions.join(", ") : destination.city} çevresindeki tarihi &
-                    turistik noktalar canlı keşfediliyor…
+                    {t("p.loading", { where })}
                   </>
                 ) : liveStatus === "error" ? (
                   <>
                     <Radio size={14} className="shrink-0 text-rose-500" />
-                    Canlı keşfe şu an ulaşılamadı{curatedCount ? "; seçki kartları gösteriliyor." : "."}
+                    {t("p.error")}
+                    {curatedCount ? t("p.errorCurated") : "."}
                     <button
                       type="button"
                       onClick={retry}
                       className="ml-1 flex items-center gap-1 rounded-lg glass-secondary px-2 py-0.5 font-medium text-ink"
                     >
-                      <RotateCw size={11} /> Tekrar dene
+                      <RotateCw size={11} /> {t("p.retry")}
                     </button>
                   </>
                 ) : (
@@ -673,10 +686,10 @@ export default function PlaceDiscoveryStep({ destination }: TripRoute) {
                     <span>
                       {curatedCount > 0 && (
                         <>
-                          <b className="text-ink">{curatedCount}</b> seçki kartı +{" "}
+                          <b className="text-ink">{curatedCount}</b> {t("p.curatedWord")}{" "}
                         </>
                       )}
-                      <b className="text-ink">{liveCount}</b> canlı Wikipedia keşfi (gerçek fotoğraf & özet)
+                      <b className="text-ink">{liveCount}</b> {t("p.liveWord")}
                     </span>
                   </>
                 )}
@@ -729,11 +742,11 @@ export default function PlaceDiscoveryStep({ destination }: TripRoute) {
 
             {visible.length === 0 && !(liveStatus === "loading" && places.length === 0) && (
               <p className="rounded-2xl border border-dashed border-ink/15 p-8 text-center text-sm text-ink/50">
-                {places.length === 0 ? "Bu ülke için henüz mekan bulunamadı." : "Bu filtreye uygun mekan yok."}
+                {places.length === 0 ? t("p.noPlacesCountry") : t("p.noPlacesFilter")}
               </p>
             )}
 
-            <p className="pb-1 text-center text-[10px] text-ink/35">Fotoğraf & özetler: Wikipedia (CC BY-SA) · Unsplash</p>
+            <p className="pb-1 text-center text-[10px] text-ink/35">{t("p.footer")}</p>
           </div>
         </div>
 
@@ -745,7 +758,8 @@ export default function PlaceDiscoveryStep({ destination }: TripRoute) {
         <div className="relative h-full">
           <WorldMap mode="places" places={places} className="card h-full w-full rounded-2xl lg:rounded-3xl" />
           <div className="glass pointer-events-none absolute left-3 top-3 rounded-xl px-3 py-1.5 text-xs font-medium text-ink/80">
-            {regions.length ? regions.join(" · ") : destination.city} · {selectedPlaces.length} seçili
+            {regions.length ? regions.map((r) => regionName(r, t)).join(" · ") : cityName(destination, t.locale)} ·{" "}
+            {t("p.selectedCount", { n: selectedPlaces.length })}
           </div>
         </div>
       </motion.section>

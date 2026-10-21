@@ -39,7 +39,7 @@ Not: `AGENTS.md` uyarısı — bu Next sürümü farklı; API şüphesi olursa `
 - `mockFlights.ts` — Deterministik uçuş simülatörü: `getFlights(origin, dest, date)` (kürasyonlu şablon yoksa `generateFlightTemplates`), `formatDuration(min)`.
 - `mockHotels.ts` — Her şehir bölgesine 3 mock otel (budget/central/luxury, gerçekçi fiyat/puan/yorum/koordinat), `HOTEL_TIER_META`, `getHotelsForRegion()`.
 - `transitLines.ts` — `CITY_LINES`: gerçek hat verisi (ad, renk adı/hex, `termini`, sefer aralığı, ilk sefer, `loop`, sıralı `[ad, lng, lat]` istasyonlar) — Tokyo, Roma, Paris (+RER B), New York, Washington D.C., Seul, Busan, Londra, Barselona, Madrid.
-- `languageCards.ts` — `PHRASE_CATEGORIES` (5 sekme), `PHRASE_KEYS` (12 ifade, sıra = kart sırası), `PHRASE_BOOKS` (21 dil: `takeMePron`, `speechLang`, `phrases[key] = [yerel, okunuş, trOverride?]`).
+- `languageCards.ts` — `PHRASE_CATEGORIES` (5 sekme, ad `pc.*`), `PHRASE_KEYS` (12 ifade, sıra = kart sırası, anlam `ph.*`), `PHRASE_BOOKS` (21 dil: `takeMePron`, `speechLang`, `phrases[key] = [yerel, okunuş, variant?]`).
 - `mockPlaces.ts` — `PLACES_BY_DESTINATION` (her hedef 8–9 mekan, 2 şehir), `CATEGORY_META`, `HOURS_PER_DAY=7`, `estimateTripDays()`, `getPlacesForDestination()`, `getRegions()`.
 
 ## src/lib
@@ -48,7 +48,7 @@ Not: `AGENTS.md` uyarısı — bu Next sürümü farklı; API şüphesi olursa `
 - `server/userStore.ts` — SADECE API route'ları: `data/users.json` deposu, scrypt hash, oturum token'ları, `listUsersForAdmin`.
 - `cn.ts` — `clsx` + `tailwind-merge`.
 - `globalRouteEngine.ts` — Haversine, `routeInfo`, kademe bazlı direkt kuralı + 30 gerçek hub ile `generateFlightTemplates`, `profileForAirport`, `nearestAirport`.
-- `i18n.ts` — 6 dilli sözlük + dil algılama + `countryName`/`cityName`/süre biçimleri (sunucu-güvenli). · `useI18n.ts` — `useT()` hook'u.
+- `i18n.ts` — 6 dilli sözlük + dil algılama + `countryName`/`cityName`/`languageName`/`areaLabel`/`lineColorName`/`transferName`/`intlLocale`/süre biçimleri (sunucu-güvenli). · `i18nGuide.ts` — Adım 2–4 + harita + dil kartları + admin sözlüğü (`GUIDE_TR`…`GUIDE_ZH`, i18n.ts'e yayılır). · `useI18n.ts` — `useT()` hook'u.
 - `prefs.ts` — çerez + localStorage tercihleri. · `geoClient.ts` — `/api/geo`, GPS → en yakın havalimanı, `useGeoBootstrap`.
 - `motion.ts` — Ortak görsel dil: `EASE_OUT_EXPO`, `STEP_TRANSITION` (adım kök geçişi, sadece opaklık), `SPRING_IN`, `SLIDE_FROM_LEFT`/`SLIDE_FROM_RIGHT` (panel girişleri), `STAGGER_PARENT`/`RISE_ITEM` (variants dalgası), `riseIn(index)` (gecikmeli kart girişi), `CARD_HOVER`, `GLASS_CARD` (boştaki kart cam kenarlığı), `PHOTO_ZOOM`.
 - `globalDiscovery.ts` — Ülke profilleri (kıta, şehirler, costIndex, dil), 21 dillik `LANGUAGES`, `COUNTRY_CARRIERS` + kalkıştan bağımsız dinamik uçuş şablonu + otel jeneratörü, canlı Wikimedia GeoSearch mekan keşfi. (Sunucu-güvenli, React yok.)
@@ -64,7 +64,7 @@ Not: `AGENTS.md` uyarısı — bu Next sürümü farklı; API şüphesi olursa `
 - `trip.ts` — Tüm domain tipleri (Airport, Flight, Place, Hotel, BudgetBreakdown…).
 
 ## Konvansiyonlar
-- UI metinleri `t("anahtar")` ile (`src/lib/i18n.ts`: önce `tr`ye ekle, sonra 5 dile — eksik anahtar tip hatası verir); yorumlar Türkçe. Adım kart içerikleri hâlâ düz Türkçe. Para birimi USD, `$` + `toLocaleString("en-US")`.
+- UI metinleri `t("anahtar")` ile (`src/lib/i18n.ts`: önce `tr`ye ekle, sonra 5 dile — eksik anahtar tip hatası verir); yorumlar Türkçe. Tüm bileşen metinleri çevrili (src/components'te yorum dışı Türkçe yok); veri içeriği (mekan adı/hikaye/mustDo, otel adı/highlights, TR okunuşlar) kaynak dilde kalır. Veri setindeki TR şehir adları ekranda `cityName({ city }, locale)` ile gösterilir. Para birimi USD, `$` + `toLocaleString("en-US")`.
 - Harita: Leaflet + resmi OpenStreetMap karoları (`tile.openstreetmap.org`), API anahtarı yok; dark tema da aynı OSM karoları + Soft Slate Navy CSS `filter` (`invert(100%) hue-rotate(190deg) saturate(140%) brightness(88%) contrast(85%)`, zemin #0D162B).
 - Wikimedia Action API (`w/api.php?origin=*`) anahtarsız; istekleri SIRALI at (paralelde 429). CARTO/Mapbox KULLANILMAZ. `maplibre-gl` KULLANILMAZ (Turbopack Worker hatası).
 - Sayfa düzeni (wizard): her adım `absolute inset-0`, masaüstünde `lg:grid lg:grid-cols-[..] lg:overflow-hidden` (sol kaydırılabilir içerik + alt CTA bar, sağda `card rounded-3xl` harita); <lg TÜM adım kökü dikey kayar (`overflow-y-auto overflow-x-hidden`), harita üstte `h-[360px] sm:h-[420px] rounded-2xl` tam etkileşimli, CTA bar `sticky bottom-0 lg:static`. KURAL: mobilde içerik/harita gizlenmez.

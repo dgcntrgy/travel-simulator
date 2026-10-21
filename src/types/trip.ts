@@ -169,12 +169,8 @@ export interface TransitRoute {
   waitMinutes: number;
   rideMinutes: number;
   walkFromMinutes: number;
-  /** "İstasyonu" (raylı) | "Durağı" (otobüs) */
-  stationWord: string;
   /** Biniş → iniş arası istasyon koordinatları (haritada hat bu yoldan çizilir) */
   path: LngLat[];
-  /** "Otelden 4 dk yürü ➔ …" adım adım tarif */
-  steps: string[];
 }
 
 /** İki şehir arası geçiş (örn: Tokyo ➔ Kyoto Shinkansen) */

@@ -2,17 +2,18 @@ import type { LanguageCode } from "@/lib/globalDiscovery";
 
 /**
  * Pro dil kartları: 4 ifade kategorisi × 3 kart (+ dinamik "📍 Adres" kartları FinalGuideStep'te).
- * Her ifade [yerel yazılış, Türkçe okunuş (telaffuz)]; isteğe bağlı 3. eleman Türkçe anlamı ezer
- * (örn. metrosu olmayan ülkede "En yakın otobüs durağı nerede?").
+ * Her ifade [yerel yazılış, Türkçe okunuş (telaffuz)]; isteğe bağlı 3. eleman anlam varyantıdır
+ * (örn. metrosu olmayan ülkede "busStop" → `ph.nearestMetro.busStop` "En yakın otobüs durağı nerede?").
+ * Sekme adları (`pc.*`) ve anlamlar (`ph.*`) arayüz dilinde i18n sözlüğünden gelir; yerel yazılış hedef dilde kalır.
  */
 export type PhraseCategory = "address" | "transit" | "restaurant" | "shopping" | "emergency";
 
-export const PHRASE_CATEGORIES: { id: PhraseCategory; emoji: string; label: string }[] = [
-  { id: "address", emoji: "📍", label: "Mekan & Otel Adresleri" },
-  { id: "transit", emoji: "🚇", label: "Taksi & Metro" },
-  { id: "restaurant", emoji: "🍜", label: "Restoran & Sipariş" },
-  { id: "shopping", emoji: "🛍️", label: "Alışveriş & Tax-Free" },
-  { id: "emergency", emoji: "🚨", label: "Acil Durum & Yardım" },
+export const PHRASE_CATEGORIES: { id: PhraseCategory; emoji: string }[] = [
+  { id: "address", emoji: "📍" },
+  { id: "transit", emoji: "🚇" },
+  { id: "restaurant", emoji: "🍜" },
+  { id: "shopping", emoji: "🛍️" },
+  { id: "emergency", emoji: "🚨" },
 ];
 
 export type PhraseKey =
@@ -30,22 +31,25 @@ export type PhraseKey =
   | "pharmacy";
 
 /** Sıra = kart sırası; ücretsiz modda ilk 2 kart (transit) açık */
-export const PHRASE_KEYS: { key: PhraseKey; category: Exclude<PhraseCategory, "address">; tr: string }[] = [
-  { key: "trainTo", category: "transit", tr: "Bu tren buraya gider mi?" },
-  { key: "dropMe", category: "transit", tr: "Lütfen beni bu istasyonda indirin." },
-  { key: "nearestMetro", category: "transit", tr: "En yakın metro istasyonu nerede?" },
-  { key: "popularDish", category: "restaurant", tr: "En popüler yerel yemeğiniz hangisi?" },
-  { key: "noPorkAlcohol", category: "restaurant", tr: "Bunda domuz eti veya alkol var mı?" },
-  { key: "bill", category: "restaurant", tr: "Hesabı alabilir miyim?" },
-  { key: "taxFree", category: "shopping", tr: "Vergi iadesi (Tax-Free) var mı?" },
-  { key: "discount", category: "shopping", tr: "Daha uygun bir fiyat olur mu?" },
-  { key: "card", category: "shopping", tr: "Kredi kartı geçerli mi?" },
-  { key: "english", category: "emergency", tr: "İngilizce bilen var mı?" },
-  { key: "lost", category: "emergency", tr: "Pasaportumu / telefonumu kaybettim." },
-  { key: "pharmacy", category: "emergency", tr: "En yakın eczane / hastane nerede?" },
+export const PHRASE_KEYS: { key: PhraseKey; category: Exclude<PhraseCategory, "address"> }[] = [
+  { key: "trainTo", category: "transit" },
+  { key: "dropMe", category: "transit" },
+  { key: "nearestMetro", category: "transit" },
+  { key: "popularDish", category: "restaurant" },
+  { key: "noPorkAlcohol", category: "restaurant" },
+  { key: "bill", category: "restaurant" },
+  { key: "taxFree", category: "shopping" },
+  { key: "discount", category: "shopping" },
+  { key: "card", category: "shopping" },
+  { key: "english", category: "emergency" },
+  { key: "lost", category: "emergency" },
+  { key: "pharmacy", category: "emergency" },
 ];
 
-type Entry = [local: string, pron: string, trOverride?: string];
+/** Metrosu olmayan ülkelerde anlamı değişen kartlar (`ph.<key>.<variant>`) */
+export type PhraseVariant = "bus" | "busTram" | "vehicle" | "stop" | "here" | "busStop" | "slower";
+
+type Entry = [local: string, pron: string, variant?: PhraseVariant];
 
 export interface PhraseBook {
   /** "Lütfen beni bu adrese götürün" okunuşu (yazılış `LANGUAGES[code].takeMe`) */
@@ -141,7 +145,7 @@ export const PHRASE_BOOKS: Record<LanguageCode, PhraseBook> = {
       taxFree: ["Is tax-free shopping available?", "İz teks-frii şoping ıveylıbıl?"],
       discount: ["Can you give me a better price?", "Ken yu giv mi ı betır prays?"],
       card: ["Do you accept credit cards?", "Du yu ıksept kredit kards?"],
-      english: ["Could you speak more slowly, please?", "Kud yu spiik mor sloli, pliiz?", "Daha yavaş konuşabilir misiniz?"],
+      english: ["Could you speak more slowly, please?", "Kud yu spiik mor sloli, pliiz?", "slower"],
       lost: ["I lost my passport / phone.", "Ay lost may pesport / fon."],
       pharmacy: ["Where is the nearest pharmacy / hospital?", "Veır iz dı niırest farmısi / hospitıl?"],
     },
@@ -330,9 +334,9 @@ export const PHRASE_BOOKS: Record<LanguageCode, PhraseBook> = {
     takeMePron: "Molim vas, odvezite me na ovu adresu",
     speechLang: "hr-HR",
     phrases: {
-      trainTo: ["Ide li ovaj autobus / tramvaj ovamo?", "İde li ovay avtobus / tramvay ovamo?", "Bu otobüs / tramvay buraya gider mi?"],
-      dropMe: ["Molim vas, ostavite me na ovoj stanici.", "Molim vas, ostavite me na ovoy stanitsi.", "Lütfen beni bu durakta indirin."],
-      nearestMetro: ["Gdje je najbliža autobusna stanica?", "Gdye ye nayblija avtobusna stanitsa?", "En yakın otobüs durağı nerede?"],
+      trainTo: ["Ide li ovaj autobus / tramvaj ovamo?", "İde li ovay avtobus / tramvay ovamo?", "busTram"],
+      dropMe: ["Molim vas, ostavite me na ovoj stanici.", "Molim vas, ostavite me na ovoy stanitsi.", "stop"],
+      nearestMetro: ["Gdje je najbliža autobusna stanica?", "Gdye ye nayblija avtobusna stanitsa?", "busStop"],
       popularDish: ["Koje je vaše najpopularnije domaće jelo?", "Koye ye vaşe naypopularniye domaçe yelo?"],
       noPorkAlcohol: ["Ima li ovo svinjetinu ili alkohol?", "İma li ovo svinyetinu ili alkohol?"],
       bill: ["Račun, molim.", "Raçun, molim."],
@@ -348,9 +352,9 @@ export const PHRASE_BOOKS: Record<LanguageCode, PhraseBook> = {
     takeMePron: "Tolong antar saya ke alamat ini",
     speechLang: "id-ID",
     phrases: {
-      trainTo: ["Apakah bus ini ke sini?", "Apakah bus ini ke sini?", "Bu otobüs buraya gider mi?"],
-      dropMe: ["Tolong turunkan saya di sini.", "Tolong turunkan saya di sini.", "Lütfen beni burada indirin."],
-      nearestMetro: ["Di mana halte terdekat?", "Di mana halte terdekat?", "En yakın durak nerede?"],
+      trainTo: ["Apakah bus ini ke sini?", "Apakah bus ini ke sini?", "bus"],
+      dropMe: ["Tolong turunkan saya di sini.", "Tolong turunkan saya di sini.", "here"],
+      nearestMetro: ["Di mana halte terdekat?", "Di mana halte terdekat?", "stop"],
       popularDish: ["Apa makanan lokal yang paling populer di sini?", "Apa makanan lokal yang paling populer di sini?"],
       noPorkAlcohol: ["Apakah ini mengandung babi atau alkohol?", "Apakah ini mengandung babi atau alkohol?"],
       bill: ["Minta bon, ya.", "Minta bon, ya."],
@@ -366,8 +370,8 @@ export const PHRASE_BOOKS: Record<LanguageCode, PhraseBook> = {
     takeMePron: "Lam ơn dua toy den dia çi nay",
     speechLang: "vi-VN",
     phrases: {
-      trainTo: ["Xe này có đi đến đây không?", "Se nay ko di den day khong?", "Bu araç buraya gider mi?"],
-      dropMe: ["Cho tôi xuống ở trạm này.", "Ço toy suong ơ çam nay.", "Beni bu durakta indirin."],
+      trainTo: ["Xe này có đi đến đây không?", "Se nay ko di den day khong?", "vehicle"],
+      dropMe: ["Cho tôi xuống ở trạm này.", "Ço toy suong ơ çam nay.", "stop"],
       nearestMetro: ["Ga tàu điện gần nhất ở đâu?", "Ga tau dien gan nhat ơ dau?"],
       popularDish: ["Món ăn địa phương nổi tiếng nhất là gì?", "Mon an dia fuong noy tieng nhat la zi?"],
       noPorkAlcohol: ["Món này có thịt heo hay rượu không?", "Mon nay ko tit heo hay ziou khong?"],
@@ -402,9 +406,9 @@ export const PHRASE_BOOKS: Record<LanguageCode, PhraseBook> = {
     takeMePron: "Tafazali nipeleke kvenye anvani hii",
     speechLang: "sw-KE",
     phrases: {
-      trainTo: ["Je, basi hili linaenda hapa?", "Ce, basi hili linaenda hapa?", "Bu otobüs buraya gider mi?"],
-      dropMe: ["Tafadhali nishushe kituo hiki.", "Tafazali nişuşe kituo hiki.", "Lütfen beni bu durakta indirin."],
-      nearestMetro: ["Kituo cha basi kilicho karibu kiko wapi?", "Kituo ça basi kiliço karibu kiko vapi?", "En yakın otobüs durağı nerede?"],
+      trainTo: ["Je, basi hili linaenda hapa?", "Ce, basi hili linaenda hapa?", "bus"],
+      dropMe: ["Tafadhali nishushe kituo hiki.", "Tafazali nişuşe kituo hiki.", "stop"],
+      nearestMetro: ["Kituo cha basi kilicho karibu kiko wapi?", "Kituo ça basi kiliço karibu kiko vapi?", "busStop"],
       popularDish: ["Chakula gani cha kienyeji kinachopendwa zaidi?", "Çakula gani ça kienyeci kinaçopendva zaidi?"],
       noPorkAlcohol: ["Je, kina nyama ya nguruwe au pombe?", "Ce, kina nyama ya nguruve au pombe?"],
       bill: ["Naomba bili.", "Naomba bili."],

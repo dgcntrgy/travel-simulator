@@ -31,12 +31,10 @@ import {
 } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 import WorldMap from "@/components/map/WorldMap";
-import { formatDuration } from "@/data/mockFlights";
-import { HOTEL_TIER_META } from "@/data/mockHotels";
 import { CATEGORY_META } from "@/data/mockPlaces";
 import { PHRASE_BOOKS, PHRASE_CATEGORIES, PHRASE_KEYS, type PhraseCategory } from "@/data/languageCards";
 import { LANGUAGES, getDestinationProfile, type LanguageCode, type LanguagePack } from "@/lib/globalDiscovery";
-import { DAY_SLOTS, SLOT_META, buildItinerary, type DaySlot, type ItineraryDay, type ItineraryItem } from "@/lib/itinerary";
+import { DAY_SLOTS, SLOT_META, buildItinerary, type DaySlot, type FreeNote, type ItineraryDay, type ItineraryItem } from "@/lib/itinerary";
 import {
   TRANSIT_MODE_META,
   buildTripPlan,
@@ -45,10 +43,23 @@ import {
   formatFrequency,
   formatMinutes,
   legSteps,
+  stationLabel,
   type TripPlan,
 } from "@/lib/routeOptimizer";
+import {
+  areaLabel,
+  cityName,
+  countryName,
+  formatDurationLocale,
+  intlLocale,
+  languageName,
+  lineColorName,
+  transferName,
+  type Locale,
+  type TranslationKey,
+} from "@/lib/i18n";
 import { fetchLocalTitles, fetchWikiImage } from "@/lib/wikipedia";
-import { useT } from "@/lib/useI18n";
+import { useT, type T } from "@/lib/useI18n";
 import { computeBudget, hotelNightlyFor, hotelTotalFor, roomsFor, useTripStore } from "@/store/useTripStore";
 import { cn } from "@/lib/cn";
 import type { Airport, Flight, Hotel, IntercityTransfer, Place, TransitLeg, TripRoute } from "@/types/trip";
@@ -58,8 +69,20 @@ const usd = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 
 const TRANSFER_ICON: Record<IntercityTransfer["mode"], LucideIcon> = { train: TrainFront, bus: Bus, flight: Plane };
 
-function formatDate(date: Date | null, opts: Intl.DateTimeFormatOptions = { weekday: "long", day: "numeric", month: "long" }) {
-  return date ? date.toLocaleDateString("tr-TR", opts) : "";
+function formatDate(
+  date: Date | null,
+  locale: Locale,
+  opts: Intl.DateTimeFormatOptions = { weekday: "long", day: "numeric", month: "long" },
+) {
+  return date ? date.toLocaleDateString(intlLocale(locale), opts) : "";
+}
+
+/** Veri setindeki (Türkçe) şehir adı → seçili dilde */
+const city = (name: string, locale: Locale) => cityName({ city: name }, locale);
+
+/** Serbest zaman önerisi seçili dilde */
+function freeNoteText(t: T, item: { note: FreeNote; city: string }): string {
+  return item.note === "explore" ? t("itin.noteExplore", { city: city(item.city, t.locale) }) : t("itin.noteArrival");
 }
 
 /**
@@ -97,6 +120,7 @@ function SectionTitle({ icon: Icon, children, aside }: { icon: LucideIcon; child
 
 /** Ücretsiz modda kilitli içeriğin üstüne bulanık kaplama + "Pro ile Kilidi Aç" */
 function ProLock({ label, children }: { label: string; children: React.ReactNode }) {
+  const t = useT();
   const openUpgradeModal = useTripStore((s) => s.openUpgradeModal);
   return (
     <div className="relative overflow-hidden rounded-2xl">
@@ -112,7 +136,7 @@ function ProLock({ label, children }: { label: string; children: React.ReactNode
           onClick={openUpgradeModal}
           className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 px-3.5 py-2 text-xs font-semibold text-white shadow-[0_8px_24px_-8px_rgba(245,158,11,0.7)] hover:brightness-110 print:hidden"
         >
-          <Crown size={13} /> Pro ile Kilidi Aç
+          <Crown size={13} /> {t("g.unlock")}
         </button>
       </div>
     </div>
@@ -137,15 +161,19 @@ function GuideHero({
   const isPro = useTripStore((s) => s.isPro);
   const openUpgradeModal = useTripStore((s) => s.openUpgradeModal);
   const nights = plan.cities.reduce((s, c) => s + c.nights, 0);
-  const forward = plan.transfers.filter((t) => !t.isReturn);
+  const forward = plan.transfers.filter((x) => !x.isReturn);
   const first = itinerary[0]?.date ?? null;
   const last = itinerary.at(-1)?.date ?? null;
 
   const stats: { icon: LucideIcon; label: string; value: string }[] = [
-    { icon: CalendarDays, label: "Toplam", value: `${plan.totalDays} gün · ${nights} gece` },
-    { icon: MapPin, label: "Rota", value: `${plan.cities.length} şehir · ${plan.totalPlaces} mekan` },
-    { icon: Users, label: "Yolcu", value: `${travelers} kişi` },
-    { icon: Wallet, label: "Tahmini toplam", value: usd(total) },
+    { icon: CalendarDays, label: t("budget.total"), value: `${t("unit.days", { n: plan.totalDays })} · ${t("unit.nights", { n: nights })}` },
+    {
+      icon: MapPin,
+      label: t("g.statRoute"),
+      value: `${t("unit.cities", { n: plan.cities.length })} · ${t("unit.places", { n: plan.totalPlaces })}`,
+    },
+    { icon: Users, label: t("flight.pax"), value: t("unit.people", { n: travelers }) },
+    { icon: Wallet, label: t("g.statEstimated"), value: usd(total) },
   ];
 
   return (
@@ -157,11 +185,12 @@ function GuideHero({
         <div className="min-w-0">
           <h1 className="text-3xl font-bold text-ink md:text-4xl">
             <span className="mr-2">{destination.flag}</span>
-            {destination.country} Rehberin
+            {t("g.title", { country: countryName(destination, t.locale) })}
           </h1>
           {first && (
             <p className="mt-1.5 text-sm text-ink/60">
-              {formatDate(first, { day: "numeric", month: "long" })} – {formatDate(last, { day: "numeric", month: "long", year: "numeric" })}
+              {formatDate(first, t.locale, { day: "numeric", month: "long" })} –{" "}
+              {formatDate(last, t.locale, { day: "numeric", month: "long", year: "numeric" })}
             </p>
           )}
           <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
@@ -169,11 +198,11 @@ function GuideHero({
               <Fragment key={c.city}>
                 {i > 0 && forward[i - 1] && (
                   <span className="flex items-center gap-1 text-xs text-ink/50">
-                    <ArrowRight size={12} /> {forward[i - 1].name} <ArrowRight size={12} />
+                    <ArrowRight size={12} /> {transferName(t.locale, forward[i - 1].name)} <ArrowRight size={12} />
                   </span>
                 )}
                 <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1 font-medium text-ink">
-                  {c.city} <span className="text-ink/55">· {c.days} gün</span>
+                  {city(c.city, t.locale)} <span className="text-ink/55">· {t("unit.days", { n: c.days })}</span>
                 </span>
               </Fragment>
             ))}
@@ -187,7 +216,7 @@ function GuideHero({
               onClick={printGuide}
               className="flex items-center justify-center gap-2 rounded-xl glass-primary px-5 py-3 text-sm font-semibold text-white"
             >
-              <Printer size={16} /> 📄 PDF / Çevrimdışı Cep Rehberi Olarak İndir (Yazdır)
+              <Printer size={16} /> {t("g.pdfDownload")}
             </button>
           ) : (
             <button
@@ -196,7 +225,7 @@ function GuideHero({
               title={t("guide.pdfLockedTitle")}
               className="flex items-center justify-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-5 py-3 text-sm font-semibold text-amber-700 hover:bg-amber-500/15 dark:text-amber-300"
             >
-              🔒 Pro Özel: PDF Cep Rehberi İndir
+              🔒{t("guide.pdfLocked")}
             </button>
           )}
         </div>
@@ -246,7 +275,7 @@ function useBudgetCategories(plan: TripPlan): { categories: BudgetCategory[]; to
     const hotels = [...recommendedHotels].sort(
       (a, b) => hotelOrder.indexOf(a.cityRegion) - hotelOrder.indexOf(b.cityRegion),
     );
-    const people = `${travelers} kişi`;
+    const people = t("unit.people", { n: travelers });
 
     const categories: BudgetCategory[] = [
       {
@@ -259,7 +288,7 @@ function useBudgetCategories(plan: TripPlan): { categories: BudgetCategory[]; to
           ? [
               {
                 label: `${selectedFlight.airline} · ${selectedFlight.flightNumber}`,
-                detail: `${people} × ${usd(selectedFlight.price)} gidiş-dönüş`,
+                detail: t("g.flightRT", { people, price: usd(selectedFlight.price) }),
                 amount: budget.flight,
               },
             ]
@@ -272,8 +301,8 @@ function useBudgetCategories(plan: TripPlan): { categories: BudgetCategory[]; to
         color: "#818cf8",
         amount: budget.hotel,
         lines: hotels.map((h) => ({
-          label: `${h.name} (${h.cityRegion})`,
-          detail: `${h.nights} gece × ${usd(hotelNightlyFor(h, travelers))} · ${roomsFor(travelers)} oda`,
+          label: `${h.name} (${city(h.cityRegion, t.locale)})`,
+          detail: `${t("unit.nights", { n: h.nights })} × ${usd(hotelNightlyFor(h, travelers))} · ${t("unit.rooms", { n: roomsFor(travelers) })}`,
           amount: hotelTotalFor(h, travelers),
         })),
       },
@@ -287,15 +316,15 @@ function useBudgetCategories(plan: TripPlan): { categories: BudgetCategory[]; to
           ...plan.cities.map((c) => {
             const evaluation = chosenEvaluation(c, recommendedHotels);
             return {
-              label: `${c.city} şehir içi`,
-              detail: `${c.places.length} mekan gidiş-dönüş × ${people}`,
+              label: t("g.cityTransit", { city: city(c.city, t.locale) }),
+              detail: t("g.cityTransitDetail", { places: t("unit.places", { n: c.places.length }), people }),
               amount: (evaluation?.transitCost ?? 0) * travelers,
             };
           }),
-          ...plan.transfers.map((t) => ({
-            label: `${t.from} ➔ ${t.to}${t.isReturn ? " (dönüş)" : ""}`,
-            detail: `${t.name} × ${people}`,
-            amount: t.cost * travelers,
+          ...plan.transfers.map((tf) => ({
+            label: `${city(tf.from, t.locale)} ➔ ${city(tf.to, t.locale)}${tf.isReturn ? ` ${t("g.returnSuffix")}` : ""}`,
+            detail: `${transferName(t.locale, tf.name)} × ${people}`,
+            amount: tf.cost * travelers,
           })),
         ],
       },
@@ -309,7 +338,7 @@ function useBudgetCategories(plan: TripPlan): { categories: BudgetCategory[]; to
           .filter((p) => p.estimatedCost > 0)
           .map((p) => ({
             label: p.name,
-            detail: `${CATEGORY_META[p.category].short} · ${people} × ${usd(p.estimatedCost)}`,
+            detail: `${t(`cat.${p.category}`)} · ${people} × ${usd(p.estimatedCost)}`,
             amount: p.estimatedCost * travelers,
           })),
       },
@@ -331,7 +360,7 @@ function BudgetTable({ categories, total, days }: { categories: BudgetCategory[]
             {c.label}
           </p>
           {c.lines.length === 0 ? (
-            <p className="text-xs text-ink/45">Kalem yok</p>
+            <p className="text-xs text-ink/45">{t("g.noItems")}</p>
           ) : (
             c.lines.map((l) => (
               <div key={l.label} className="flex items-baseline justify-between gap-3 py-0.5 text-xs">
@@ -350,8 +379,8 @@ function BudgetTable({ categories, total, days }: { categories: BudgetCategory[]
 
   return (
     <section className="card print-break-avoid rounded-3xl p-5">
-      <SectionTitle icon={Wallet} aside={<span className="text-[11px] text-ink/45">USD · {travelers} kişi</span>}>
-        Bütçe Kırılımı
+      <SectionTitle icon={Wallet} aside={<span className="text-[11px] text-ink/45">USD · {t("unit.people", { n: travelers })}</span>}>
+        {t("g.budgetTitle")}
       </SectionTitle>
 
       {/* Oransal şerit */}
@@ -397,12 +426,12 @@ function BudgetTable({ categories, total, days }: { categories: BudgetCategory[]
         </tfoot>
       </table>
       <p className="mt-2 flex justify-between text-[11px] text-ink/50">
-        <span>Kişi başı ≈ {usd(total / Math.max(1, travelers))}</span>
-        <span>Günlük ≈ {usd(total / Math.max(1, days))}</span>
+        <span>{t("g.perPersonApprox", { v: usd(total / Math.max(1, travelers)) })}</span>
+        <span>{t("g.dailyApprox", { v: usd(total / Math.max(1, days)) })}</span>
       </p>
 
       <div className="mt-4 border-t border-dashed border-ink/15 pt-4">
-        {isPro ? details : <ProLock label="Kalem kalem tam bütçe dökümü Pro'da">{details}</ProLock>}
+        {isPro ? details : <ProLock label={t("g.budgetLocked")}>{details}</ProLock>}
       </div>
     </section>
   );
@@ -411,34 +440,38 @@ function BudgetTable({ categories, total, days }: { categories: BudgetCategory[]
 // ------------------------------------------------------------------ Uçuş & oteller
 
 function FlightSummary({ flight }: { flight: Flight | null }) {
+  const t = useT();
   if (!flight) {
     return (
       <section className="card rounded-3xl p-5 text-sm text-ink/55">
-        <SectionTitle icon={Plane}>Uçuş</SectionTitle>
-        Uçuş seçilmedi — bütçeye uçak bileti eklenmedi.
+        <SectionTitle icon={Plane}>{t("budget.flight")}</SectionTitle>
+        {t("g.noFlight")}
       </section>
     );
   }
   return (
     <section className="card print-break-avoid rounded-3xl p-5">
       <SectionTitle icon={Plane} aside={<span className="font-mono text-xs text-ink/50">{flight.flightNumber}</span>}>
-        Uçuş Özeti
+        {t("g.flightSummary")}
       </SectionTitle>
       <p className="text-sm font-semibold text-ink">{flight.airline}</p>
       <div className="mt-3 flex items-center justify-between gap-3">
         <div>
           <p className="font-mono text-xl font-semibold text-ink">{flight.departureTime}</p>
           <p className="flex items-center gap-1 text-xs text-ink/55">
-            <PlaneTakeoff size={12} /> {flight.origin.city} · {flight.origin.code}
+            <PlaneTakeoff size={12} /> {cityName(flight.origin, t.locale)} · {flight.origin.code}
           </p>
         </div>
         <div className="flex flex-1 flex-col items-center text-[11px] text-ink/50">
-          <span>{formatDuration(flight.totalDurationMinutes)}</span>
+          <span>{formatDurationLocale(t.locale, flight.totalDurationMinutes)}</span>
           <span className="my-1 h-px w-full bg-gradient-to-r from-blue-500/60 to-blue-400/60" />
           <span className={flight.layover ? "text-amber-600 dark:text-amber-400" : "text-blue-600 dark:text-blue-400"}>
             {flight.layover
-              ? `${flight.layover.airport.city} aktarma · ${formatDuration(flight.layover.durationMinutes)}`
-              : "Direkt"}
+              ? t("g.layoverAt", {
+                  city: cityName(flight.layover.airport, t.locale),
+                  dur: formatDurationLocale(t.locale, flight.layover.durationMinutes),
+                })
+              : t("flight.direct")}
           </span>
         </div>
         <div className="text-right">
@@ -449,24 +482,28 @@ function FlightSummary({ flight }: { flight: Flight | null }) {
             )}
           </p>
           <p className="flex items-center justify-end gap-1 text-xs text-ink/55">
-            {flight.destination.code} · {flight.destination.city} <PlaneLanding size={12} />
+            {flight.destination.code} · {cityName(flight.destination, t.locale)} <PlaneLanding size={12} />
           </p>
         </div>
       </div>
       <p className="mt-3 text-[11px] text-ink/45">
-        Kabin {flight.cabinBaggageKg}kg · Bagaj {flight.checkedBaggageKg ? `${flight.checkedBaggageKg}kg` : "ekstra"} · Kişi
-        başı {usd(flight.price)} gidiş-dönüş
+        {t("g.baggage", {
+          cabin: flight.cabinBaggageKg,
+          bag: flight.checkedBaggageKg ? `${flight.checkedBaggageKg}kg` : t("g.extra"),
+          price: usd(flight.price),
+        })}
       </p>
     </section>
   );
 }
 
 function HotelsSummary({ plan }: { plan: TripPlan }) {
+  const t = useT();
   const recommendedHotels = useTripStore((s) => s.recommendedHotels);
   const travelers = useTripStore((s) => s.travelers);
   return (
     <section className="card print-break-avoid rounded-3xl p-5">
-      <SectionTitle icon={BedDouble}>Konaklama</SectionTitle>
+      <SectionTitle icon={BedDouble}>{t("budget.catHotel")}</SectionTitle>
       <div className="space-y-3">
         {plan.cities.map((c) => {
           const evaluation = chosenEvaluation(c, recommendedHotels);
@@ -480,18 +517,21 @@ function HotelsSummary({ plan }: { plan: TripPlan }) {
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-ink">{hotel.name}</p>
                 <p className="truncate text-[11px] text-ink/50">
-                  {c.city} · {hotel.area} · {HOTEL_TIER_META[hotel.tier].short}
+                  {city(c.city, t.locale)} · {areaLabel(t.locale, hotel.area)} · {t(`tier.${hotel.tier}.short`)}
                 </p>
                 <p className="mt-0.5 flex items-center gap-2 text-[11px] text-ink/55">
                   <span className="flex items-center gap-0.5">
                     <Star size={10} className="fill-amber-400 text-amber-400" /> {hotel.rating}
                   </span>
-                  <span>%{score} rotana uygun</span>
+                  <span>{t("g.routeFit", { n: score })}</span>
                 </p>
               </div>
               <div className="text-right font-mono text-xs tabular-nums">
-                <p className="font-semibold text-ink">{c.nights} gece</p>
-                <p className="text-ink/50">{usd(hotelNightlyFor(hotel, travelers))}/gece</p>
+                <p className="font-semibold text-ink">{t("unit.nights", { n: c.nights })}</p>
+                <p className="text-ink/50">
+                  {usd(hotelNightlyFor(hotel, travelers))}
+                  {t("unit.perNight")}
+                </p>
               </div>
             </div>
           );
@@ -514,6 +554,7 @@ function ItineraryRow({
   destination: Airport;
   origin: Airport;
 }) {
+  const t = useT();
   const isPro = useTripStore((s) => s.isPro);
 
   let icon: LucideIcon = MapPin;
@@ -527,11 +568,10 @@ function ItineraryRow({
       body = (
         <>
           <p className="text-sm font-medium text-ink">
-            {destination.airportName} ({destination.code}) varış
+            {t("itin.arrivalAt", { place: destination.airportName, code: destination.code })}
           </p>
           <p className="text-xs text-ink/55">
-            {item.flight ? `${item.flight.airline} · ${item.flight.flightNumber}` : "Uçuş seçilmedi"} · pasaport & bagaj
-            sonrası şehre geçiş
+            {item.flight ? `${item.flight.airline} · ${item.flight.flightNumber}` : t("itin.noFlight")} · {t("itin.arrivalSub")}
           </p>
         </>
       );
@@ -541,8 +581,10 @@ function ItineraryRow({
       accent = "bg-indigo-500/15 text-indigo-600 dark:text-indigo-300";
       body = (
         <>
-          <p className="text-sm font-medium text-ink">Otele yerleşme · {item.hotel.name}</p>
-          <p className="text-xs text-ink/55">{item.hotel.area}</p>
+          <p className="text-sm font-medium text-ink">
+            {t("itin.checkin")} · {item.hotel.name}
+          </p>
+          <p className="text-xs text-ink/55">{areaLabel(t.locale, item.hotel.area)}</p>
         </>
       );
       break;
@@ -552,11 +594,12 @@ function ItineraryRow({
       body = (
         <>
           <p className="text-sm font-medium text-ink">
-            {item.transfer.from} ➔ {item.transfer.to}
-            {item.transfer.isReturn && <span className="font-normal text-ink/50"> (dönüş uçuşu için)</span>}
+            {city(item.transfer.from, t.locale)} ➔ {city(item.transfer.to, t.locale)}
+            {item.transfer.isReturn && <span className="font-normal text-ink/50"> {t("itin.forReturn")}</span>}
           </p>
           <p className="text-xs text-ink/55">
-            {item.transfer.name} · {formatMinutes(item.transfer.minutes)} · kişi başı {usd(item.transfer.cost)}
+            {transferName(t.locale, item.transfer.name)} · {formatMinutes(item.transfer.minutes, t.locale)} ·{" "}
+            {t("common.perPerson")} {usd(item.transfer.cost)}
           </p>
         </>
       );
@@ -565,7 +608,7 @@ function ItineraryRow({
     case "free":
       icon = Coffee;
       accent = "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300";
-      body = <p className="text-sm text-ink/75">{item.note}</p>;
+      body = <p className="text-sm text-ink/75">{freeNoteText(t, item)}</p>;
       break;
     case "departure":
       icon = PlaneTakeoff;
@@ -573,9 +616,9 @@ function ItineraryRow({
       body = (
         <>
           <p className="text-sm font-medium text-ink">
-            Havalimanına transfer & dönüş uçuşu · {destination.code} ➔ {origin.code}
+            {t("itin.departureRow", { from: destination.code, to: origin.code })}
           </p>
-          <p className="text-xs text-ink/55">Uluslararası uçuşlarda kalkıştan en az 3 saat önce havalimanında ol.</p>
+          <p className="text-xs text-ink/55">{t("itin.departureTip")}</p>
         </>
       );
       break;
@@ -589,11 +632,11 @@ function ItineraryRow({
           <p className="flex flex-wrap items-baseline gap-x-2 text-sm font-semibold text-ink">
             {place.name}
             <span className="text-[11px] font-normal" style={{ color: meta.color }}>
-              {meta.short}
+              {t(`cat.${place.category}`)}
             </span>
             <span className="text-[11px] font-normal text-ink/45">
-              {place.recommendedDuration.toLocaleString("tr-TR")} sa ·{" "}
-              {place.estimatedCost ? `~${usd(place.estimatedCost)}` : "Ücretsiz"}
+              {t("unit.hours", { n: place.recommendedDuration.toLocaleString(intlLocale(t.locale)) })} ·{" "}
+              {place.estimatedCost ? `~${usd(place.estimatedCost)}` : t("common.free")}
             </span>
           </p>
           {leg &&
@@ -603,7 +646,7 @@ function ItineraryRow({
               </div>
             ) : (
               <p className="mt-1 flex items-center gap-1.5 text-xs text-ink/45">
-                <Lock size={11} className="text-amber-500" /> Otelden ulaşım hattı & süresi Pro&apos;da
+                <Lock size={11} className="text-amber-500" /> {t("itin.transitPro")}
               </p>
             ))}
           {place.story && <p className="mt-1.5 line-clamp-3 text-xs leading-relaxed text-ink/60 print:line-clamp-4">{place.story}</p>}
@@ -611,7 +654,7 @@ function ItineraryRow({
             <p className="mt-2 flex gap-1.5 rounded-xl border border-amber-500/25 bg-amber-500/[0.07] px-3 py-2 text-xs leading-relaxed text-ink/75">
               <Lightbulb size={13} className="mt-0.5 shrink-0 text-amber-500" />
               <span>
-                <b className="text-amber-700 dark:text-amber-300">Lokal ipucu: </b>
+                <b className="text-amber-700 dark:text-amber-300">{t("itin.localTip")} </b>
                 {place.mustDo}
               </span>
             </p>
@@ -659,6 +702,7 @@ function dayCost(day: ItineraryDay): number {
  * Bilerek animasyonsuz: `whileInView` ile opacity 0 başlayan kartlar ekranda hiç görünmediği için yazdırmada boş kalıyordu.
  */
 function DayCard({ day, destination, origin }: { day: ItineraryDay; destination: Airport; origin: Airport }) {
+  const t = useT();
   const cost = dayCost(day);
   return (
     <article className="print-day overflow-hidden rounded-2xl border border-slate-300 bg-white text-slate-900">
@@ -669,9 +713,9 @@ function DayCard({ day, destination, origin }: { day: ItineraryDay; destination:
           </span>
           <div className="leading-tight">
             <p className="text-lg font-bold">
-              {day.day}. Gün · {day.city}
+              {t("unit.dayN", { n: day.day })} · {city(day.city, t.locale)}
             </p>
-            <p className="text-[11px] capitalize text-slate-500">{formatDate(day.date)}</p>
+            <p className="text-[11px] capitalize text-slate-500">{formatDate(day.date, t.locale)}</p>
           </div>
         </div>
         <div className="text-right text-[11px] leading-tight text-slate-500">
@@ -681,7 +725,7 @@ function DayCard({ day, destination, origin }: { day: ItineraryDay; destination:
             </p>
           )}
           <p className="mt-0.5">
-            Günün tahmini harcaması: <b className="font-mono text-slate-900">{usd(cost)}</b>
+            {t("itin.dayCost")} <b className="font-mono text-slate-900">{usd(cost)}</b>
           </p>
         </div>
       </header>
@@ -692,7 +736,7 @@ function DayCard({ day, destination, origin }: { day: ItineraryDay; destination:
             <section key={slot} className="print-slot grid grid-cols-[7.5rem_1fr] gap-4 px-5 py-4">
               <div className="leading-tight">
                 <p className="text-sm font-semibold">
-                  {SLOT_META[slot].emoji} {SLOT_META[slot].label}
+                  {SLOT_META[slot].emoji} {t(`slot.${slot}`)}
                 </p>
                 <p className="font-mono text-[10px] text-slate-500">{SLOT_META[slot].range}</p>
               </div>
@@ -703,7 +747,7 @@ function DayCard({ day, destination, origin }: { day: ItineraryDay; destination:
                   ))}
                 </ol>
               ) : (
-                <p className="self-center text-xs italic text-slate-400">Serbest zaman</p>
+                <p className="self-center text-xs italic text-slate-400">{t("itin.free")}</p>
               )}
             </section>
           );
@@ -771,6 +815,7 @@ function BookingLinks({
   origin: Airport;
   destination: Airport;
 }) {
+  const t = useT();
   const flight = useTripStore((s) => s.selectedFlight);
   const travelers = useTripStore((s) => s.travelers);
   const recommendedHotels = useTripStore((s) => s.recommendedHotels);
@@ -787,9 +832,9 @@ function BookingLinks({
       <div className="relative">
         <SectionTitle
           icon={Ticket}
-          aside={<span className="text-[11px] text-ink/45">Dış siteler yeni sekmede açılır · fiyatlar değişebilir</span>}
+          aside={<span className="text-[11px] text-ink/45">{t("g.bookAside")}</span>}
         >
-          Rezervasyon & Harekete Geç
+          {t("g.bookTitle")}
         </SectionTitle>
 
         <div className="grid gap-4 lg:grid-cols-2">
@@ -798,25 +843,31 @@ function BookingLinks({
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-blue-700 dark:text-blue-300">
-                  ✈️ Uçak bileti
+                  {t("g.flightTicket")}
                 </p>
                 <p className="mt-1 truncate text-base font-semibold text-ink">
-                  {flight ? flight.airline : "Uçuş seçilmedi"}
+                  {flight ? flight.airline : t("itin.noFlight")}
                   <span className="ml-2 font-mono text-xs font-normal text-ink/50">
                     {origin.code} → {destination.code}
                   </span>
                 </p>
                 <p className="text-xs text-ink/55">
                   {flight
-                    ? `${flight.type === "direct" ? "Direkt" : `${flight.layover?.airport.city} aktarmalı`} · ${formatDuration(flight.totalDurationMinutes)}`
-                    : "Rotan için en uygun bileti ara"}
-                  {depart && ret && ` · ${formatDate(depart, { day: "numeric", month: "short" })} – ${formatDate(ret, { day: "numeric", month: "short" })}`}
+                    ? `${
+                        flight.type === "direct" || !flight.layover
+                          ? t("flight.direct")
+                          : t("g.viaCity", { city: cityName(flight.layover.airport, t.locale) })
+                      } · ${formatDurationLocale(t.locale, flight.totalDurationMinutes)}`
+                    : t("g.findBest")}
+                  {depart &&
+                    ret &&
+                    ` · ${formatDate(depart, t.locale, { day: "numeric", month: "short" })} – ${formatDate(ret, t.locale, { day: "numeric", month: "short" })}`}
                 </p>
               </div>
               {flight && (
                 <div className="shrink-0 text-right leading-tight">
                   <p className="font-mono text-xl font-bold tabular-nums text-ink">{usd(flight.price)}</p>
-                  <p className="text-[10px] text-ink/45">kişi başı · g-d</p>
+                  <p className="text-[10px] text-ink/45">{t("g.perPersonRT")}</p>
                 </div>
               )}
             </div>
@@ -826,7 +877,7 @@ function BookingLinks({
               className="mt-3 flex items-center justify-center gap-2 rounded-xl glass-primary px-4 py-3 text-sm font-semibold text-white"
             >
               <Plane size={15} />
-              Seçtiğin Uçak Biletini Al
+              {t("g.buyTicket")}
               {flight && <span className="font-normal opacity-90">· {flight.airline} {usd(flight.price * travelers)}</span>}
               <ExternalLink size={13} />
             </a>
@@ -847,7 +898,7 @@ function BookingLinks({
           {/* Oteller */}
           <div className="rounded-2xl border border-indigo-500/25 bg-indigo-500/[0.06] p-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-indigo-700 dark:text-indigo-300">
-              🏨 Seçtiğin oteller
+              {t("g.yourHotels")}
             </p>
             <div className="mt-2 space-y-2">
               {plan.cities.map((c) => {
@@ -860,8 +911,8 @@ function BookingLinks({
                     <div className="min-w-0 flex-1 leading-tight">
                       <p className="truncate text-sm font-medium text-ink">{hotel.name}</p>
                       <p className="truncate text-[11px] text-ink/50">
-                        {c.city} · {c.nights} gece × {usd(hotelNightlyFor(hotel, travelers))}
-                        {checkin && ` · giriş ${formatDate(checkin, { day: "numeric", month: "short" })}`}
+                        {city(c.city, t.locale)} · {t("unit.nights", { n: c.nights })} × {usd(hotelNightlyFor(hotel, travelers))}
+                        {checkin && ` · ${t("g.checkin", { date: formatDate(checkin, t.locale, { day: "numeric", month: "short" }) })}`}
                       </p>
                     </div>
                     <a
@@ -869,7 +920,7 @@ function BookingLinks({
                       href={bookingUrl(hotel, checkin, c.nights, travelers)}
                       className="flex shrink-0 items-center gap-1.5 rounded-lg glass-primary px-3 py-2 text-xs font-semibold text-white"
                     >
-                      Rezervasyon Yap <ExternalLink size={11} />
+                      {t("g.book")} <ExternalLink size={11} />
                     </a>
                   </div>
                 );
@@ -919,47 +970,47 @@ interface ItemVisual {
   subtitle?: string;
 }
 
-function itemVisual(item: ItineraryItem, destination: Airport, origin: Airport, travelers: number): ItemVisual {
+function itemVisual(item: ItineraryItem, destination: Airport, origin: Airport, travelers: number, t: T): ItemVisual {
   switch (item.kind) {
     case "arrival":
       return {
         icon: PlaneLanding,
         color: "#0ea5e9",
-        kicker: "Varış",
-        title: `${destination.city} (${destination.code}) varış`,
+        kicker: t("itin.arrival"),
+        title: t("itin.arrivalAt", { place: cityName(destination, t.locale), code: destination.code }),
         subtitle: item.flight ? `${item.flight.airline} · ${item.flight.flightNumber}` : undefined,
       };
     case "checkin":
       return {
         icon: BedDouble,
         color: "#6366f1",
-        kicker: "Otele yerleşme",
+        kicker: t("itin.checkin"),
         title: item.hotel.name,
-        subtitle: `${item.hotel.area} · ${usd(hotelNightlyFor(item.hotel, travelers))}/gece`,
+        subtitle: `${areaLabel(t.locale, item.hotel.area)} · ${usd(hotelNightlyFor(item.hotel, travelers))}${t("unit.perNight")}`,
       };
     case "transfer":
       return {
         icon: TRANSFER_ICON[item.transfer.mode],
         color: "#f43f5e",
-        kicker: item.transfer.isReturn ? "Dönüş yolculuğu" : "Şehir değişimi",
-        title: `${item.transfer.from} ➔ ${item.transfer.to}`,
-        subtitle: `${item.transfer.name} · ${formatMinutes(item.transfer.minutes)}`,
+        kicker: item.transfer.isReturn ? t("itin.returnTrip") : t("itin.cityChange"),
+        title: `${city(item.transfer.from, t.locale)} ➔ ${city(item.transfer.to, t.locale)}`,
+        subtitle: `${transferName(t.locale, item.transfer.name)} · ${formatMinutes(item.transfer.minutes, t.locale)}`,
       };
     case "free":
-      return { icon: Coffee, color: "#10b981", kicker: "Serbest zaman", title: item.note };
+      return { icon: Coffee, color: "#10b981", kicker: t("itin.free"), title: freeNoteText(t, item) };
     case "departure":
       return {
         icon: PlaneTakeoff,
         color: "#0ea5e9",
-        kicker: "Dönüş uçuşu",
+        kicker: t("itin.returnFlight"),
         title: `${destination.code} ➔ ${origin.code}`,
-        subtitle: "Havalimanına transfer",
+        subtitle: t("itin.toAirport"),
       };
     case "place":
       return {
         icon: MapPin,
         color: CATEGORY_META[item.place.category].color,
-        kicker: CATEGORY_META[item.place.category].short,
+        kicker: t(`cat.${item.place.category}`),
         title: item.place.name,
       };
   }
@@ -1028,9 +1079,11 @@ function TransitStrip({
   arrival: string;
   variant: "cell" | "full";
 }) {
+  const t = useT();
   const isPro = useTripStore((s) => s.isPro);
   const openUpgradeModal = useTripStore((s) => s.openUpgradeModal);
   const meta = TRANSIT_MODE_META[leg.mode];
+  const km = leg.distanceKm.toLocaleString(intlLocale(t.locale));
   const route = leg.route;
   const color = route?.color ?? meta.color;
   const depart = shiftClock(arrival, -leg.minutes);
@@ -1044,7 +1097,7 @@ function TransitStrip({
       onClick={(e) => e.stopPropagation()}
       className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:underline dark:text-blue-400"
     >
-      📍 Haritada Yol Tarifi Al
+      {t("g.directions")}
     </a>
   );
 
@@ -1053,9 +1106,9 @@ function TransitStrip({
       <div className="space-y-0.5 rounded-lg border px-2 py-1.5 text-[10.5px] leading-snug text-ink/70" style={tint}>
         <p className="flex items-center justify-between gap-1 font-semibold" style={{ color }}>
           <span className="truncate">
-            {meta.emoji} {depart} Hareket
+            {meta.emoji} {t("g.departs", { time: depart })}
           </span>
-          <span className="shrink-0 font-mono">{leg.minutes} dk</span>
+          <span className="shrink-0 font-mono">{formatMinutes(leg.minutes, t.locale)}</span>
         </p>
         {route ? (
           <>
@@ -1063,11 +1116,11 @@ function TransitStrip({
               {route.from.name} ➔ {route.to.name}
             </p>
             <p className="truncate">
-              {route.line} · Her {route.headwayMinutes} dk&apos;da bir
+              {route.line} · {t("unit.every", { n: route.headwayMinutes })}
             </p>
           </>
         ) : (
-          <p className="truncate">Otelden yürüyerek · {leg.distanceKm.toLocaleString("tr-TR")} km</p>
+          <p className="truncate">{t("g.walkFromHotel", { km })}</p>
         )}
         {link && <p className="truncate pt-0.5">{link}</p>}
       </div>
@@ -1083,7 +1136,7 @@ function TransitStrip({
           onClick={openUpgradeModal}
           className="absolute inset-0 flex items-center justify-center gap-1 rounded-lg text-[10.5px] font-semibold text-amber-700 hover:bg-amber-500/10 dark:text-amber-300"
         >
-          <Lock size={11} /> Yol tarifi Pro&apos;da
+          <Lock size={11} /> {t("g.directionsPro")}
         </button>
       </div>
     );
@@ -1091,22 +1144,22 @@ function TransitStrip({
 
   const facts: [string, string][] = route
     ? [
-        ["Kalkış", `${depart} Hareket (otelden)`],
-        ["Biniş ➔ İniş", `${route.from.name} ➔ ${route.to.name}`],
-        ["Hat", `${route.line} · ${route.colorName} · ${route.direction} yönü`],
-        ["Sefer sıklığı", formatFrequency(route)],
-        ["Yolculuk süresi", `${formatMinutes(leg.minutes)} · ${route.stops} durak`],
-        ["Bilet", leg.cost ? `${usd(leg.cost)} / kişi` : "Ücretsiz"],
+        [t("g.fDepart"), t("g.departsHotel", { time: depart })],
+        [t("g.fBoardAlight"), `${stationLabel(t.locale, leg.mode, route.from.name)} ➔ ${stationLabel(t.locale, leg.mode, route.to.name)}`],
+        [t("g.fLine"), `${route.line} · ${lineColorName(t.locale, route.colorName)} · ${t("g.direction", { dir: route.direction })}`],
+        [t("g.fFreq"), formatFrequency(route, t.locale)],
+        [t("g.fDuration"), `${formatMinutes(leg.minutes, t.locale)} · ${t("unit.stops", { n: route.stops })}`],
+        [t("g.fTicket"), leg.cost ? t("g.perPersonPrice", { price: usd(leg.cost) }) : t("common.free")],
       ]
     : [
-        ["Kalkış", `${depart} Hareket (otelden)`],
-        ["Yürüyüş", `${formatMinutes(leg.minutes)} · ${leg.distanceKm.toLocaleString("tr-TR")} km`],
+        [t("g.fDepart"), t("g.departsHotel", { time: depart })],
+        [t("mode.walk"), `${formatMinutes(leg.minutes, t.locale)} · ${km} km`],
       ];
 
   return (
     <div className="print-break-avoid rounded-xl border p-3 text-xs" style={tint}>
       <p className="flex items-center gap-1.5 font-semibold" style={{ color }}>
-        🚇 Ulaşım & Yol Tarifi Şeridi
+        {t("g.stripTitle")}
       </p>
       <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
         {facts.map(([k, v]) => (
@@ -1117,7 +1170,7 @@ function TransitStrip({
         ))}
       </dl>
       <ol className="mt-2 list-decimal space-y-0.5 pl-4 text-ink/75">
-        {legSteps(leg, place).map((step) => (
+        {legSteps(leg, place, t.locale).map((step) => (
           <li key={step}>{step}</li>
         ))}
       </ol>
@@ -1140,9 +1193,10 @@ function SlotCard({
   origin: Airport;
   onOpen: () => void;
 }) {
+  const t = useT();
   const isPro = useTripStore((s) => s.isPro);
   const travelers = useTripStore((s) => s.travelers);
-  const v = itemVisual(item, destination, origin, travelers);
+  const v = itemVisual(item, destination, origin, travelers, t);
   const Icon = v.icon;
 
   let footer: React.ReactNode = null;
@@ -1151,11 +1205,11 @@ function SlotCard({
     const meta = leg ? TRANSIT_MODE_META[leg.mode] : null;
     footer = (
       <>
-        <span className="font-mono font-semibold text-ink/80">{place.estimatedCost ? `~${usd(place.estimatedCost)}` : "Ücretsiz"}</span>
+        <span className="font-mono font-semibold text-ink/80">{place.estimatedCost ? `~${usd(place.estimatedCost)}` : t("common.free")}</span>
         {meta && leg && (
           <span className="flex items-center gap-1 truncate" style={{ color: meta.color }}>
-            {meta.emoji} {meta.label}
-            {isPro ? ` · ${leg.minutes} dk` : ""}
+            {meta.emoji} {t(`mode.${leg.mode}`)}
+            {isPro ? ` · ${formatMinutes(leg.minutes, t.locale)}` : ""}
           </span>
         )}
       </>
@@ -1164,11 +1218,11 @@ function SlotCard({
     footer = (
       <>
         <span className="font-mono font-semibold text-ink/80">{usd(item.transfer.cost)}</span>
-        <span className="truncate text-ink/55">kişi başı</span>
+        <span className="truncate text-ink/55">{t("common.perPerson")}</span>
       </>
     );
   } else if (item.kind === "checkin") {
-    footer = <span className="truncate text-ink/55">{HOTEL_TIER_META[item.hotel.tier].short}</span>;
+    footer = <span className="truncate text-ink/55">{t(`tier.${item.hotel.tier}.short`)}</span>;
   }
 
   return (
@@ -1218,6 +1272,7 @@ function ItemDetailModal({
   origin: Airport;
   onClose: () => void;
 }) {
+  const t = useT();
   const isPro = useTripStore((s) => s.isPro);
   const travelers = useTripStore((s) => s.travelers);
 
@@ -1228,7 +1283,7 @@ function ItemDetailModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [item, onClose]);
 
-  const v = item ? itemVisual(item, destination, origin, travelers) : null;
+  const v = item ? itemVisual(item, destination, origin, travelers, t) : null;
 
   let body: React.ReactNode = null;
   if (item) {
@@ -1243,30 +1298,30 @@ function ItemDetailModal({
             <p className="text-sm leading-relaxed text-ink/75">{place.story}</p>
             <div className="grid grid-cols-2 gap-2">
               <div className="rounded-xl border border-ink/10 bg-ink/[0.03] px-3 py-2">
-                <p className="text-[10px] uppercase tracking-[0.12em] text-ink/45">Tahmini maliyet</p>
+                <p className="text-[10px] uppercase tracking-[0.12em] text-ink/45">{t("g.estCost")}</p>
                 <p className="font-mono text-base font-semibold text-ink">
-                  {place.estimatedCost ? usd(place.estimatedCost) : "Ücretsiz"}
+                  {place.estimatedCost ? usd(place.estimatedCost) : t("common.free")}
                 </p>
               </div>
               <div className="rounded-xl border border-ink/10 bg-ink/[0.03] px-3 py-2">
-                <p className="text-[10px] uppercase tracking-[0.12em] text-ink/45">Önerilen süre</p>
+                <p className="text-[10px] uppercase tracking-[0.12em] text-ink/45">{t("g.recDuration")}</p>
                 <p className="font-mono text-base font-semibold text-ink">
-                  {place.recommendedDuration.toLocaleString("tr-TR")} saat
+                  {t("unit.hours", { n: place.recommendedDuration.toLocaleString(intlLocale(t.locale)) })}
                 </p>
               </div>
             </div>
-            {legInfo && (isPro ? legInfo : <ProLock label="İstasyonlar, kalkış saati & yol tarifi Pro'da">{legInfo}</ProLock>)}
+            {legInfo && (isPro ? legInfo : <ProLock label={t("g.stationsPro")}>{legInfo}</ProLock>)}
             {place.mustDo &&
               (isPro ? (
                 <p className="flex gap-1.5 rounded-xl border border-amber-500/25 bg-amber-500/[0.07] px-3 py-2 text-xs leading-relaxed text-ink/75">
                   <Lightbulb size={13} className="mt-0.5 shrink-0 text-amber-500" />
                   <span>
-                    <b className="text-amber-700 dark:text-amber-300">Lokal ipucu: </b>
+                    <b className="text-amber-700 dark:text-amber-300">{t("itin.localTip")} </b>
                     {place.mustDo}
                   </span>
                 </p>
               ) : (
-                <ProLock label="Lokal ipucu Pro'da">
+                <ProLock label={t("g.tipPro")}>
                   <p className="rounded-xl border border-amber-500/25 px-3 py-2 text-xs">{place.mustDo}</p>
                 </ProLock>
               ))}
@@ -1275,7 +1330,7 @@ function ItemDetailModal({
               href={`https://en.wikipedia.org/wiki/${encodeURIComponent(place.wikiTitle)}`}
               className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
             >
-              Wikipedia&apos;da oku <ExternalLink size={11} />
+              {t("g.readWiki")} <ExternalLink size={11} />
             </a>
           </>
         );
@@ -1284,41 +1339,42 @@ function ItemDetailModal({
       case "arrival":
         body = (
           <p className="text-sm leading-relaxed text-ink/75">
-            {destination.airportName} ({destination.code}) havalimanına iniş.{" "}
+            {t("itin.arrivalDetail", { airport: destination.airportName, code: destination.code })}{" "}
             {item.flight
-              ? `${item.flight.airline} ${item.flight.flightNumber} · yerel saatle ${item.flight.arrivalTime}.`
+              ? t("itin.arrivalLocal", {
+                  flight: `${item.flight.airline} ${item.flight.flightNumber}`,
+                  time: item.flight.arrivalTime,
+                })
               : ""}{" "}
-            Pasaport kontrolü ve bagaj sonrası şehre geçiş; ilk gün dinlenme ve uyum günü.
+            {t("itin.arrivalRest")}
           </p>
         );
         break;
       case "checkin":
         body = (
           <p className="text-sm leading-relaxed text-ink/75">
-            {item.hotel.name} · {item.hotel.area}. {HOTEL_TIER_META[item.hotel.tier].label} · ⭐ {item.hotel.rating}/10 ·{" "}
-            {usd(hotelNightlyFor(item.hotel, travelers))}/gece. {item.hotel.highlights.join(" · ")}
+            {item.hotel.name} · {areaLabel(t.locale, item.hotel.area)}. {t(`tier.${item.hotel.tier}`)} · ⭐ {item.hotel.rating}/10 ·{" "}
+            {usd(hotelNightlyFor(item.hotel, travelers))}
+            {t("unit.perNight")}. {item.hotel.highlights.join(" · ")}
           </p>
         );
         break;
       case "transfer":
         body = (
           <p className="text-sm leading-relaxed text-ink/75">
-            {item.transfer.name}: {item.transfer.from} ➔ {item.transfer.to} · {formatMinutes(item.transfer.minutes)} · kişi
-            başı {usd(item.transfer.cost)}.{" "}
-            {item.transfer.isReturn
-              ? "Dönüş uçuşu için varış şehrine geri dönüş."
-              : "Sabah erken yola çık; yeni şehre varınca otele yerleş ve günün kalanında keşfe başla."}
+            {transferName(t.locale, item.transfer.name)}: {city(item.transfer.from, t.locale)} ➔{" "}
+            {city(item.transfer.to, t.locale)} · {formatMinutes(item.transfer.minutes, t.locale)} · {t("common.perPerson")}{" "}
+            {usd(item.transfer.cost)}. {item.transfer.isReturn ? t("itin.transferReturn") : t("itin.transferForward")}
           </p>
         );
         break;
       case "free":
-        body = <p className="text-sm leading-relaxed text-ink/75">{item.note}</p>;
+        body = <p className="text-sm leading-relaxed text-ink/75">{freeNoteText(t, item)}</p>;
         break;
       case "departure":
         body = (
           <p className="text-sm leading-relaxed text-ink/75">
-            Havalimanına transfer ve dönüş uçuşu ({destination.code} ➔ {origin.code}). Uluslararası uçuşlarda kalkıştan en
-            az 3 saat önce havalimanında ol.
+            {t("itin.departureDetail", { from: destination.code, to: origin.code })}
           </p>
         );
         break;
@@ -1362,7 +1418,7 @@ function ItemDetailModal({
                     <v.icon size={12} /> {v.kicker}
                     {day && (
                       <span className="font-normal normal-case tracking-normal text-ink/50">
-                        · {day.day}. Gün ({day.city}) · {item.time}
+                        · {t("unit.dayN", { n: day.day })} ({city(day.city, t.locale)}) · {item.time}
                       </span>
                     )}
                   </p>
@@ -1372,7 +1428,7 @@ function ItemDetailModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  aria-label="Kapat"
+                  aria-label={t("common.close")}
                   className="grid h-9 w-9 shrink-0 place-items-center rounded-xl glass-secondary text-ink/60 hover:text-ink"
                 >
                   <X size={16} />
@@ -1400,6 +1456,7 @@ function TimetableGrid({
   destination: Airport;
   origin: Airport;
 }) {
+  const t = useT();
   const [open, setOpen] = useState<{ day: number; index: number } | null>(null);
   const openDay = open ? itinerary.find((d) => d.day === open.day) ?? null : null;
   const openItem = openDay && open ? openDay.items[open.index] ?? null : null;
@@ -1414,16 +1471,16 @@ function TimetableGrid({
   return (
     <section className="card overflow-hidden rounded-3xl print:hidden">
       <div className="flex flex-wrap items-center justify-between gap-2 px-5 pt-5">
-        <SectionTitle icon={CalendarDays}>Haftalık Gezi Programı</SectionTitle>
+        <SectionTitle icon={CalendarDays}>{t("g.weekly")}</SectionTitle>
         <div className="mb-3 flex flex-wrap items-center gap-3 text-[11px] text-ink/55">
           {plan.cities.map((c) => (
             <span key={c.city} className="flex items-center gap-1.5">
               <span className="h-2.5 w-2.5 rounded-full" style={{ background: cityColor(c.city) }} />
-              {c.city} · {c.days} gün
+              {city(c.city, t.locale)} · {t("unit.days", { n: c.days })}
             </span>
           ))}
-          <span className="text-ink/40">Bloklara tıkla → detay</span>
-          <span className="text-ink/40 lg:hidden">· ⇆ Günler arasında yana kaydır</span>
+          <span className="text-ink/40">{t("g.clickHint")}</span>
+          <span className="text-ink/40 lg:hidden">{t("g.scrollHint")}</span>
         </div>
       </div>
 
@@ -1447,12 +1504,12 @@ function TimetableGrid({
                 style={{ borderTopColor: color }}
               >
                 <p className="text-sm font-bold text-ink">
-                  {day.day}. Gün <span style={{ color }}>({day.city})</span>
+                  {t("unit.dayN", { n: day.day })} <span style={{ color }}>({city(day.city, t.locale)})</span>
                 </p>
                 <p className="flex items-center justify-between gap-2 text-[11px] text-ink/50">
-                  <span className="capitalize">{formatDate(day.date, { weekday: "short", day: "numeric", month: "short" })}</span>
-                  {moving && <span className="rounded-full bg-rose-500/12 px-1.5 text-[10px] font-semibold text-rose-600 dark:text-rose-300">🚄 Şehir değişimi</span>}
-                  {day.day === 1 && <span className="rounded-full bg-blue-500/12 px-1.5 text-[10px] font-semibold text-blue-600 dark:text-blue-300">✈️ Varış</span>}
+                  <span className="capitalize">{formatDate(day.date, t.locale, { weekday: "short", day: "numeric", month: "short" })}</span>
+                  {moving && <span className="rounded-full bg-rose-500/12 px-1.5 text-[10px] font-semibold text-rose-600 dark:text-rose-300">🚄 {t("itin.cityChange")}</span>}
+                  {day.day === 1 && <span className="rounded-full bg-blue-500/12 px-1.5 text-[10px] font-semibold text-blue-600 dark:text-blue-300">✈️ {t("itin.arrival")}</span>}
                 </p>
               </div>
             );
@@ -1468,7 +1525,7 @@ function TimetableGrid({
                     SLOT_THEME[slot].badge,
                   )}
                 >
-                  {SLOT_META[slot].emoji} {SLOT_META[slot].label}
+                  {SLOT_META[slot].emoji} {t(`slot.${slot}`)}
                 </span>
                 <p className="font-mono text-[11px] text-ink/45">{SLOT_META[slot].range}</p>
               </div>
@@ -1487,7 +1544,7 @@ function TimetableGrid({
                     )}
                   >
                     {entries.length === 0 ? (
-                      <span className="text-[11px] text-ink/30">Serbest</span>
+                      <span className="text-[11px] text-ink/30">{t("itin.freeShort")}</span>
                     ) : (
                       entries.map(({ item, index }) => (
                         <SlotCard
@@ -1518,8 +1575,8 @@ function TimetableGrid({
 /** Kartın tam ekran / sesli gösterim verisi */
 interface ShowCard {
   id: string;
-  /** Kart başlığındaki Türkçe anlam */
-  tr: string;
+  /** Kart başlığındaki anlam (arayüz dilinde) */
+  meaning: string;
   /** Dev puntoyla gösterilen yerel yazılış */
   local: string;
   pron: string;
@@ -1543,14 +1600,18 @@ function speak(text: string, lang: string) {
 function FullscreenPhrase({
   card,
   lang,
+  langName,
   speechLang,
   onClose,
 }: {
   card: ShowCard | null;
   lang: LanguagePack;
+  /** Hedef dilin adı, arayüz dilinde */
+  langName: string;
   speechLang: string;
   onClose: () => void;
 }) {
+  const t = useT();
   useEffect(() => {
     if (!card) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -1565,7 +1626,7 @@ function FullscreenPhrase({
           key="phrase-fullscreen"
           role="dialog"
           aria-modal="true"
-          aria-label={card.tr}
+          aria-label={card.meaning}
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.98 }}
@@ -1574,7 +1635,7 @@ function FullscreenPhrase({
         >
           <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-3">
             <p className="text-sm font-semibold text-slate-500">
-              {card.emoji} {card.tr} · {lang.name}
+              {card.emoji} {card.meaning} · {langName}
             </p>
             <div className="flex items-center gap-2">
               <button
@@ -1582,12 +1643,12 @@ function FullscreenPhrase({
                 onClick={() => speak(card.request ? `${card.request}. ${card.local}` : card.local, speechLang)}
                 className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
               >
-                🔊 Sesli Oku
+                {t("g.speak")}
               </button>
               <button
                 type="button"
                 onClick={onClose}
-                aria-label="Kapat"
+                aria-label={t("common.close")}
                 className="grid h-10 w-10 place-items-center rounded-xl bg-slate-900 text-white hover:bg-slate-700"
               >
                 <X size={18} />
@@ -1612,11 +1673,11 @@ function FullscreenPhrase({
               </p>
             ))}
             <div className="max-w-3xl rounded-2xl bg-slate-100 px-6 py-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Okunuşu (Telaffuz)</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">{t("g.pron")}</p>
               <p className="mt-1 text-xl font-medium italic text-slate-800 md:text-3xl">{card.pron}</p>
             </div>
           </div>
-          <p className="pb-4 text-center text-xs text-slate-400">Telefonu şoföre / garsona uzat · kapatmak için Esc ya da ✕</p>
+          <p className="pb-4 text-center text-xs text-slate-400">{t("g.handPhone")}</p>
         </motion.div>
       )}
     </AnimatePresence>,
@@ -1635,10 +1696,11 @@ function PhraseCardView({
   speechLang: string;
   onShow: () => void;
 }) {
+  const t = useT();
   return (
     <div className="print-break-avoid rounded-2xl border border-ink/10 bg-ink/[0.03] p-3.5 print:border-slate-300 print:bg-white">
       <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink/45">
-        {card.emoji} {card.tr}
+        {card.emoji} {card.meaning}
       </p>
       {card.request && (
         <p className="mt-1.5 text-sm font-semibold text-ink/80" dir={lang.rtl ? "rtl" : undefined}>
@@ -1660,12 +1722,12 @@ function PhraseCardView({
           onClick={onShow}
           className="flex items-center gap-1 rounded-lg glass-primary px-2.5 py-1.5 text-[11px] font-semibold text-white"
         >
-          🔍 Tam Ekran Göster (Şoföre/Garsona Uzat)
+          {t("g.fullscreen")}
         </button>
         <button
           type="button"
           onClick={() => speak(card.request ? `${card.request}. ${card.local}` : card.local, speechLang)}
-          aria-label="Sesli oku"
+          aria-label={t("g.speakAria")}
           className="rounded-lg glass-secondary px-2.5 py-1.5 text-[11px] font-semibold text-ink/70 hover:text-ink"
         >
           🔊
@@ -1680,9 +1742,11 @@ function PhraseCardView({
  * alışveriş/tax-free ve acil durum ifadeleri. Ücretsiz: yalnız ilk 2 ifade kartı açık.
  */
 function PhraseCards({ plan, langCode, country }: { plan: TripPlan; langCode: LanguageCode; country: string }) {
+  const t = useT();
   const isPro = useTripStore((s) => s.isPro);
   const recommendedHotels = useTripStore((s) => s.recommendedHotels);
   const lang = LANGUAGES[langCode];
+  const langName = languageName(langCode, lang.name, t.locale);
   const book = PHRASE_BOOKS[langCode];
   const [tab, setTab] = useState<PhraseCategory>(isPro ? "address" : "transit");
   const [shown, setShown] = useState<ShowCard | null>(null);
@@ -1715,33 +1779,34 @@ function PhraseCards({ plan, langCode, country }: { plan: TripPlan; langCode: La
     ...hotels.map((h) => ({
       id: `addr-${h.id}`,
       emoji: "🏨",
-      tr: `Otelim · ${h.cityRegion}`,
+      meaning: t("g.myHotel", { city: city(h.cityRegion, t.locale) }),
       request: lang.takeMe,
       local: h.name,
       pron: book.takeMePron,
-      details: [`${h.area}, ${h.cityRegion}, ${country}`, `GPS ${h.coordinates[1].toFixed(5)}, ${h.coordinates[0].toFixed(5)}`],
+      details: [`${areaLabel(t.locale, h.area)}, ${city(h.cityRegion, t.locale)}, ${country}`, `GPS ${h.coordinates[1].toFixed(5)}, ${h.coordinates[0].toFixed(5)}`],
     })),
     ...places.map((p) => {
       const local = names[p.wikiTitle];
       return {
         id: `addr-${p.id}`,
         emoji: "📍",
-        tr: `${p.name} · ${p.cityRegion}`,
+        meaning: `${p.name} · ${city(p.cityRegion, t.locale)}`,
         request: lang.takeMe,
         local: local ?? p.name,
         pron: book.takeMePron,
         details: [
           ...(local && local !== p.name ? [p.name] : []),
-          `${p.cityRegion}, ${country} · GPS ${p.coordinates[1].toFixed(5)}, ${p.coordinates[0].toFixed(5)}`,
+          `${city(p.cityRegion, t.locale)}, ${country} · GPS ${p.coordinates[1].toFixed(5)}, ${p.coordinates[0].toFixed(5)}`,
         ],
       };
     }),
   ];
 
-  const phraseCards = PHRASE_KEYS.map(({ key, category, tr }, index) => {
-    const [local, pron, trOverride] = book.phrases[key];
+  const phraseCards = PHRASE_KEYS.map(({ key, category }, index) => {
+    const [local, pron, variant] = book.phrases[key];
     const cat = PHRASE_CATEGORIES.find((c) => c.id === category)!;
-    return { card: { id: key, emoji: cat.emoji, tr: trOverride ?? tr, local, pron } as ShowCard, category, free: index < 2 };
+    const meaning = t((variant ? `ph.${key}.${variant}` : `ph.${key}`) as TranslationKey);
+    return { card: { id: key, emoji: cat.emoji, meaning, local, pron } as ShowCard, category, free: index < 2 };
   });
   const totalCards = addressCards.length + phraseCards.length;
 
@@ -1752,7 +1817,7 @@ function PhraseCards({ plan, langCode, country }: { plan: TripPlan; langCode: La
   let tabContent: React.ReactNode;
   if (tab === "address") {
     const grid = <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">{addressCards.map(renderCard)}</div>;
-    tabContent = isPro ? grid : <ProLock label={`${addressCards.length} adres kartı Pro'da`}>{grid}</ProLock>;
+    tabContent = isPro ? grid : <ProLock label={t("g.addrLocked", { n: addressCards.length })}>{grid}</ProLock>;
   } else {
     const items = phraseCards.filter((p) => p.category === tab);
     const open = items.filter((p) => isPro || p.free);
@@ -1761,7 +1826,7 @@ function PhraseCards({ plan, langCode, country }: { plan: TripPlan; langCode: La
       <div className="space-y-2.5">
         {open.length > 0 && <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">{open.map((p) => renderCard(p.card))}</div>}
         {locked.length > 0 && (
-          <ProLock label={`${locked.length} kart daha Pro'da`}>
+          <ProLock label={t("g.moreLocked", { n: locked.length })}>
             <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-1 2xl:grid-cols-2">{locked.map((p) => renderCard(p.card))}</div>
           </ProLock>
         )}
@@ -1775,11 +1840,11 @@ function PhraseCards({ plan, langCode, country }: { plan: TripPlan; langCode: La
         icon={Languages}
         aside={
           <span className="text-[11px] text-ink/45">
-            {lang.name} · {totalCards} kart
+            {langName} · {t("unit.cards", { n: totalCards })}
           </span>
         }
       >
-        Dil & Adres Kartları
+        {t("g.langCards")}
       </SectionTitle>
 
       <div className="-mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1 pb-1 print:hidden">
@@ -1798,7 +1863,7 @@ function PhraseCards({ plan, langCode, country }: { plan: TripPlan; langCode: La
                   : "border-ink/10 text-ink/60 hover:bg-ink/[0.05] hover:text-ink",
               )}
             >
-              {c.emoji} {c.label}
+              {c.emoji} {t(`pc.${c.id}`)}
               <span className="font-mono text-ink/40">{count}</span>
             </button>
           );
@@ -1814,7 +1879,7 @@ function PhraseCards({ plan, langCode, country }: { plan: TripPlan; langCode: La
           return (
             <div key={c.id} className="print-break-avoid">
               <p className="mb-2 text-sm font-bold text-slate-900">
-                {c.emoji} {c.label}
+                {c.emoji} {t(`pc.${c.id}`)}
               </p>
               <div className="grid grid-cols-2 gap-2">{cards.map(renderCard)}</div>
             </div>
@@ -1822,7 +1887,7 @@ function PhraseCards({ plan, langCode, country }: { plan: TripPlan; langCode: La
         })}
       </div>
 
-      <FullscreenPhrase card={shown} lang={lang} speechLang={book.speechLang} onClose={closeShown} />
+      <FullscreenPhrase card={shown} lang={lang} langName={langName} speechLang={book.speechLang} onClose={closeShown} />
     </section>
   );
 }
@@ -1882,6 +1947,7 @@ function GuideActionBar() {
 
 /** Adım 4: Kişisel tur rehberi — üst özet, bütçe kırılımı, gün gün plan, dil kartları ve yazdırılabilir çıktı */
 export default function FinalGuideStep({ origin, destination }: TripRoute) {
+  const t = useT();
   const selectedFlight = useTripStore((s) => s.selectedFlight);
   const selectedPlaces = useTripStore((s) => s.selectedPlaces);
   const recommendedHotels = useTripStore((s) => s.recommendedHotels);
@@ -1905,14 +1971,14 @@ export default function FinalGuideStep({ origin, destination }: TripRoute) {
       <motion.div {...motionProps} className="absolute inset-0 grid place-items-center p-4">
         <div className="card max-w-md rounded-3xl p-8 text-center">
           <MapPin size={28} className="mx-auto text-blue-500" />
-          <h1 className="mt-3 text-xl font-bold text-ink">Rehber için mekan seçmelisin</h1>
-          <p className="mt-2 text-sm text-ink/60">Adım 2&apos;de en az iki mekan seç, otelini belirle; rehberin hazır olsun.</p>
+          <h1 className="mt-3 text-xl font-bold text-ink">{t("g.needPlaces")}</h1>
+          <p className="mt-2 text-sm text-ink/60">{t("g.needPlacesText")}</p>
           <button
             type="button"
             onClick={() => setStep(2)}
             className="mt-5 rounded-xl glass-primary px-5 py-3 text-sm font-semibold text-white"
           >
-            Mekanları Keşfet
+            {t("g.discover")}
           </button>
         </div>
       </motion.div>
@@ -1923,19 +1989,18 @@ export default function FinalGuideStep({ origin, destination }: TripRoute) {
     <motion.div {...motionProps} className={cn("print-guide absolute inset-0 flex flex-col print:static", !isPro && "print-locked")}>
       {/* Ücretsiz planda Ctrl+P ile de rehber basılmaz (globals.css `.print-locked`) */}
       <div className="print-lock-note hidden p-10 text-center text-slate-900">
-        <p className="text-2xl font-bold">🔒 PDF Cep Rehberi Pro üyelere özeldir</p>
-        <p className="mt-3 text-sm text-slate-600">
-          Gün gün rehber, metro yol tarifleri ve dil kartlarının çevrimdışı çıktısı için Travel Simulator Pro&apos;ya geç.
-        </p>
+        <p className="text-2xl font-bold">{t("g.printLockTitle")}</p>
+        <p className="mt-3 text-sm text-slate-600">{t("g.printLockText")}</p>
       </div>
       <div className="flex-1 overflow-y-auto print:overflow-visible">
         <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 md:px-8 md:py-8 print:max-w-none print:space-y-4 print:p-0">
           {/* PDF 1. sayfa (kapak & finansal özet): başlık + hero + uçuş + oteller + bütçe; ardından sayfa sonu */}
           <div className="print-cover space-y-6 print:space-y-3">
             <div className="hidden border-b border-slate-300 pb-2 print:flex print:items-end print:justify-between">
-              <p className="text-lg font-bold text-slate-900">✈️ Travel Simulator · Cep Rehberi</p>
+              <p className="text-lg font-bold text-slate-900">{t("g.printHeader")}</p>
               <p className="text-xs text-slate-500">
-                {origin.city} ➔ {destination.country} · Oluşturuldu: {new Date().toLocaleDateString("tr-TR")}
+                {cityName(origin, t.locale)} ➔ {countryName(destination, t.locale)} ·{" "}
+                {t("g.created", { date: new Date().toLocaleDateString(intlLocale(t.locale)) })}
               </p>
             </div>
 
@@ -1956,15 +2021,14 @@ export default function FinalGuideStep({ origin, destination }: TripRoute) {
           {!isPro && (
             <div className="flex flex-col items-start justify-between gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/[0.08] px-5 py-4 sm:flex-row sm:items-center print:hidden">
               <p className="text-sm text-ink/75">
-                <b className="text-ink">Ücretsiz plan:</b> genel rota ve bütçe özeti görünüyor. Pro ile kalem kalem bütçe,
-                otelden ulaşım hatları, lokal ipuçları, şoför/garson kartları ve PDF cep rehberi açılır.
+                <b className="text-ink">{t("g.freeBannerB")}</b> {t("g.freeBannerText")}
               </p>
               <button
                 type="button"
                 onClick={openUpgradeModal}
                 className="flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 px-4 py-2.5 text-sm font-semibold text-white hover:brightness-110"
               >
-                <Crown size={15} /> Pro&apos;ya Geç
+                <Crown size={15} /> {t("g.goPro")}
               </button>
             </div>
           )}
@@ -1991,9 +2055,9 @@ export default function FinalGuideStep({ origin, destination }: TripRoute) {
                 <div className="px-5 pt-5">
                   <SectionTitle
                     icon={MapPin}
-                    aside={!isPro && <span className="flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400"><Lock size={11} /> Renkli hatlar Pro</span>}
+                    aside={!isPro && <span className="flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400"><Lock size={11} /> {t("g.linesPro")}</span>}
                   >
-                    Otel & Taşıt Haritası
+                    {t("g.mapTitle")}
                   </SectionTitle>
                 </div>
                 <WorldMap mode="hotel" className="h-[360px] w-full sm:h-[420px] lg:h-80" />
@@ -2004,12 +2068,12 @@ export default function FinalGuideStep({ origin, destination }: TripRoute) {
               </div>
             </div>
             <div className="print-appendix min-w-0 space-y-4">
-              <PhraseCards plan={plan} langCode={profile.language} country={destination.country} />
+              <PhraseCards plan={plan} langCode={profile.language} country={countryName(destination, t.locale)} />
             </div>
           </div>
 
           <p className="pb-2 text-center text-[10px] text-ink/35">
-            Fiyatlar simülasyondur (USD) · Mekan özetleri: Wikipedia (CC BY-SA) · Harita: © OpenStreetMap katkıcıları
+            {t("g.footer")}
           </p>
         </div>
       </div>

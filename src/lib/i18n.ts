@@ -1,5 +1,6 @@
 import { CITY_EN } from "@/data/worldAirports";
 import type { Airport } from "@/types/trip";
+import { GUIDE_DE, GUIDE_EN, GUIDE_FR, GUIDE_JA, GUIDE_TR, GUIDE_ZH } from "@/lib/i18nGuide";
 
 /**
  * 6 dilli arayüz sözlüğü (tr kaynak dil). Sunucu-güvenli: React / store içermez
@@ -60,6 +61,7 @@ export function localeFromLanguages(tags: readonly string[] | string | null | un
 // ------------------------------------------------------------------ Sözlük
 
 const tr = {
+  ...GUIDE_TR,
   "brand.tagline": "Seyahat Simülatörü",
   "nav.home": "Ana sayfaya dön",
   "nav.continue": "Devam",
@@ -299,6 +301,7 @@ export type TranslationKey = keyof typeof tr;
 type Dict = Record<TranslationKey, string>;
 
 const en: Dict = {
+  ...GUIDE_EN,
   "brand.tagline": "Travel Simulator",
   "nav.home": "Back to home",
   "nav.continue": "Continue",
@@ -535,6 +538,7 @@ const en: Dict = {
 };
 
 const de: Dict = {
+  ...GUIDE_DE,
   "brand.tagline": "Reisesimulator",
   "nav.home": "Zur Startseite",
   "nav.continue": "Weiter",
@@ -771,6 +775,7 @@ const de: Dict = {
 };
 
 const fr: Dict = {
+  ...GUIDE_FR,
   "brand.tagline": "Simulateur de voyage",
   "nav.home": "Retour à l'accueil",
   "nav.continue": "Continuer",
@@ -1007,6 +1012,7 @@ const fr: Dict = {
 };
 
 const ja: Dict = {
+  ...GUIDE_JA,
   "brand.tagline": "旅行シミュレーター",
   "nav.home": "ホームに戻る",
   "nav.continue": "次へ",
@@ -1243,6 +1249,7 @@ const ja: Dict = {
 };
 
 const zh: Dict = {
+  ...GUIDE_ZH,
   "brand.tagline": "旅行模拟器",
   "nav.home": "返回首页",
   "nav.continue": "继续",
@@ -1537,4 +1544,47 @@ export function countryName(airport: Airport, locale: Locale): string {
 /** Şehir adı: Türkçede veri setindeki ad ("Londra"), diğer dillerde uluslararası ad ("London") */
 export function cityName(airport: Pick<Airport, "city">, locale: Locale): string {
   return locale === "tr" ? airport.city : (CITY_EN[airport.city] ?? airport.city);
+}
+
+/** Tarih / sayı biçimlendirme için Intl dil etiketi ("tr-TR", "de-DE", …) */
+export const intlLocale = (locale: Locale): string => LOCALE_META[locale].intl;
+
+/** Sözlükte `prefix + değer` anahtarı varsa çevirir, yoksa değeri olduğu gibi döndürür */
+function translateKnown(locale: Locale, prefix: string, value: string): string {
+  const key = `${prefix}${value}` as TranslationKey;
+  return key in tr ? translate(locale, key) : value;
+}
+
+/** Hat rengi adı ("Turuncu Hat" → "Orange Line") */
+export const lineColorName = (locale: Locale, name: string) => translateKnown(locale, "lc.", name);
+
+/** Şehirler arası geçiş adı: genel adlar ("İç Hat Uçuşu") çevrilir, özel adlar ("Shinkansen") aynen kalır */
+export const transferName = (locale: Locale, name: string) => translateKnown(locale, "tf.", name);
+
+/** Otel semti: "Shibuya çevresi" → "Near Shibuya", "Tokyo merkez" → "Tokyo center" */
+export function areaLabel(locale: Locale, area: string): string {
+  const near = /^(.+)\s+çevresi$/i.exec(area);
+  if (near) return translate(locale, "area.near", { name: near[1] });
+  const center = /^(.+)\s+merkez$/i.exec(area);
+  if (center) return translate(locale, "area.center", { city: cityName({ city: center[1] }, locale) });
+  return area;
+}
+
+const languageNames = new Map<Locale, Intl.DisplayNames | null>();
+
+/** Hedef ülke dilinin adı seçili arayüz dilinde ("ja" → "Japanese" / "Japanisch"); Türkçede veri setindeki ad */
+export function languageName(code: string, fallback: string, locale: Locale): string {
+  if (locale === "tr") return fallback;
+  if (!languageNames.has(locale)) {
+    try {
+      languageNames.set(locale, new Intl.DisplayNames([LOCALE_META[locale].intl], { type: "language" }));
+    } catch {
+      languageNames.set(locale, null);
+    }
+  }
+  try {
+    return languageNames.get(locale)?.of(code) ?? fallback;
+  } catch {
+    return fallback;
+  }
 }

@@ -5,42 +5,52 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Crown, Download, KeyRound, Loader2, RefreshCw, Search, ShieldCheck, X } from "lucide-react";
 import { authApi } from "@/lib/authClient";
 import { cn } from "@/lib/cn";
+import { intlLocale, type TranslationKey } from "@/lib/i18n";
+import { useT, type T } from "@/lib/useI18n";
 import { SPRING_IN } from "@/lib/motion";
 import { csvCell, sanitizeSearch } from "@/lib/security";
 import { useTripStore } from "@/store/useTripStore";
 import type { AdminUserRow } from "@/types/trip";
 
-const COLUMNS: { key: keyof AdminUserRow; label: string; className?: string }[] = [
-  { key: "id", label: "ID", className: "font-mono text-[11px]" },
-  { key: "name", label: "Ad Soyad", className: "font-semibold" },
-  { key: "email", label: "E-posta" },
-  { key: "phone", label: "Telefon", className: "font-mono" },
-  { key: "lastRoute", label: "Seçtiği Son Rota" },
-  { key: "isPro", label: "Pro Durumu" },
-  { key: "createdAt", label: "Kayıt Tarihi", className: "font-mono" },
-  { key: "hashInfo", label: "Şifre Hash Koruması", className: "font-mono text-[11px]" },
+const COLUMNS: { key: keyof AdminUserRow; label: TranslationKey | null; className?: string }[] = [
+  { key: "id", label: null, className: "font-mono text-[11px]" },
+  { key: "name", label: "auth.name", className: "font-semibold" },
+  { key: "email", label: "auth.email" },
+  { key: "phone", label: "adm.colPhone", className: "font-mono" },
+  { key: "lastRoute", label: "adm.colLastRoute" },
+  { key: "isPro", label: "adm.colPro" },
+  { key: "createdAt", label: "adm.colCreated", className: "font-mono" },
+  { key: "hashInfo", label: "adm.colHash", className: "font-mono text-[11px]" },
 ];
 
-const formatDate = (iso: string) =>
-  new Date(iso).toLocaleString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+const columnLabel = (c: (typeof COLUMNS)[number], t: T) => (c.label ? t(c.label) : "ID");
 
-function cellText(row: AdminUserRow, key: keyof AdminUserRow): string {
-  if (key === "isPro") return row.isPro ? "Pro" : "Ücretsiz";
-  if (key === "createdAt") return formatDate(row.createdAt);
+const formatDate = (iso: string, t: T) =>
+  new Date(iso).toLocaleString(intlLocale(t.locale), {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+function cellText(row: AdminUserRow, key: keyof AdminUserRow, t: T): string {
+  if (key === "isPro") return row.isPro ? "Pro" : t("pro.free");
+  if (key === "createdAt") return formatDate(row.createdAt, t);
   return String(row[key] || "—");
 }
 
 /** Türkçe karakterler Excel'de bozulmasın: UTF-8 BOM + noktalı virgül ayraç + CRLF; formül enjeksiyonu `csvCell` ile kapalı */
-function downloadCsv(rows: AdminUserRow[]) {
+function downloadCsv(rows: AdminUserRow[], t: T) {
   const lines = [
-    COLUMNS.map((c) => csvCell(c.label)).join(";"),
-    ...rows.map((r) => COLUMNS.map((c) => csvCell(cellText(r, c.key))).join(";")),
+    COLUMNS.map((c) => csvCell(columnLabel(c, t))).join(";"),
+    ...rows.map((r) => COLUMNS.map((c) => csvCell(cellText(r, c.key, t))).join(";")),
   ];
   const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `traveller-kullanicilar-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `${t("adm.csvFile")}-${new Date().toISOString().slice(0, 10)}.csv`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -54,6 +64,7 @@ export default function AdminPanel() {
 }
 
 function AdminDialog() {
+  const t = useT();
   const close = useTripStore((s) => s.closeAdmin);
   // Şifre yalnız bu bileşenin belleğinde durur (yenileme için); panel kapanınca silinir
   const [password, setPassword] = useState("");
@@ -104,7 +115,7 @@ function AdminDialog() {
       <motion.div
         role="dialog"
         aria-modal="true"
-        aria-label="Yönetici paneli"
+        aria-label={t("adm.panel")}
         initial={{ opacity: 0, y: 24, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 16, scale: 0.97 }}
@@ -118,7 +129,7 @@ function AdminDialog() {
         <button
           type="button"
           onClick={close}
-          aria-label="Kapat"
+          aria-label={t("common.close")}
           className="absolute right-4 top-4 z-10 grid h-9 w-9 place-items-center rounded-full glass-secondary text-ink/70"
         >
           <X size={16} />
@@ -126,7 +137,7 @@ function AdminDialog() {
 
         <div className="p-5 md:p-7">
           <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-600 dark:text-emerald-400">
-            <ShieldCheck size={13} /> Yönetici Paneli
+            <ShieldCheck size={13} /> {t("adm.panel")}
           </p>
 
           {!rows ? (
@@ -137,8 +148,8 @@ function AdminDialog() {
                 void load();
               }}
             >
-              <h2 className="pr-10 text-2xl font-bold">Excel Kullanıcı Tablosu</h2>
-              <p className="mt-1 text-sm text-ink/60">Kayıtlı kullanıcıları görmek için yönetici şifresini gir.</p>
+              <h2 className="pr-10 text-2xl font-bold">{t("adm.title")}</h2>
+              <p className="mt-1 text-sm text-ink/60">{t("adm.text")}</p>
               <label className="relative mt-5 block">
                 <KeyRound size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink/35" />
                 <input
@@ -146,7 +157,7 @@ function AdminDialog() {
                   autoComplete="off"
                   autoFocus
                   maxLength={128}
-                  placeholder="Yönetici şifresi"
+                  placeholder={t("adm.passwordPh")}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full rounded-xl border border-ink/10 bg-ink/[0.03] py-2.5 pl-10 pr-3.5 text-sm text-ink outline-none placeholder:text-ink/30 focus:border-blue-500/60"
@@ -162,16 +173,17 @@ function AdminDialog() {
                 disabled={busy || !password}
                 className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl glass-primary px-5 py-3 text-sm font-semibold disabled:opacity-60"
               >
-                {busy && <Loader2 size={16} className="animate-spin" />} Paneli Aç
+                {busy && <Loader2 size={16} className="animate-spin" />} {t("adm.open")}
               </button>
             </form>
           ) : (
             <>
               <div className="mt-1 flex flex-col gap-3 pr-10 md:flex-row md:items-end md:justify-between md:pr-12">
                 <div>
-                  <h2 className="text-2xl font-bold">Kayıtlı Kullanıcılar</h2>
+                  <h2 className="text-2xl font-bold">{t("adm.users")}</h2>
                   <p className="mt-1 text-sm text-ink/60">
-                    {rows.length} kullanıcı · <Crown size={12} className="inline text-amber-500" /> {proCount} Pro · kaynak:{" "}
+                    {t("adm.count", { n: rows.length })} · <Crown size={12} className="inline text-amber-500" /> {proCount} Pro ·{" "}
+                    {t("adm.source")}{" "}
                     <code className="font-mono text-xs">data/users.json</code>
                   </p>
                 </div>
@@ -182,15 +194,15 @@ function AdminDialog() {
                     disabled={busy}
                     className="flex items-center gap-1.5 rounded-xl glass-secondary px-3 py-2.5 text-sm font-medium text-ink/80"
                   >
-                    <RefreshCw size={14} className={cn(busy && "animate-spin")} /> Yenile
+                    <RefreshCw size={14} className={cn(busy && "animate-spin")} /> {t("adm.refresh")}
                   </button>
                   <button
                     type="button"
-                    onClick={() => downloadCsv(filtered)}
+                    onClick={() => downloadCsv(filtered, t)}
                     disabled={filtered.length === 0}
                     className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-emerald-600/25 transition hover:bg-emerald-500 disabled:opacity-50"
                   >
-                    <Download size={15} /> 📥 Excel (.CSV) Olarak İndir
+                    <Download size={15} /> {t("adm.csv")}
                   </button>
                 </div>
               </div>
@@ -200,7 +212,7 @@ function AdminDialog() {
                 <input
                   value={query}
                   onChange={(e) => setQuery(sanitizeSearch(e.target.value))}
-                  placeholder="Ad, e-posta, telefon veya rota ara"
+                  placeholder={t("adm.searchPh")}
                   className="w-full rounded-xl border border-ink/10 bg-ink/[0.03] py-2 pl-10 pr-3.5 text-sm text-ink outline-none placeholder:text-ink/30 focus:border-blue-500/60"
                 />
               </label>
@@ -213,7 +225,7 @@ function AdminDialog() {
                       <th className="w-10 border border-emerald-800 px-2 py-2 text-center font-mono font-medium">#</th>
                       {COLUMNS.map((c) => (
                         <th key={c.key} className="whitespace-nowrap border border-emerald-800 px-3 py-2 font-semibold">
-                          {c.label}
+                          {columnLabel(c, t)}
                         </th>
                       ))}
                     </tr>
@@ -231,12 +243,12 @@ function AdminDialog() {
                                   r.isPro ? "bg-amber-500/15 text-amber-700 dark:text-amber-300" : "bg-ink/[0.06] text-ink/60",
                                 )}
                               >
-                                {r.isPro && <Crown size={10} />} {cellText(r, c.key)}
+                                {r.isPro && <Crown size={10} />} {cellText(r, c.key, t)}
                               </span>
                             ) : c.key === "id" ? (
                               <span title={r.id}>{r.id.slice(0, 8)}…</span>
                             ) : (
-                              cellText(r, c.key)
+                              cellText(r, c.key, t)
                             )}
                           </td>
                         ))}
@@ -245,17 +257,14 @@ function AdminDialog() {
                     {filtered.length === 0 && (
                       <tr>
                         <td colSpan={COLUMNS.length + 1} className="px-3 py-10 text-center text-sm text-ink/50">
-                          {rows.length === 0 ? "Henüz kayıtlı kullanıcı yok." : "Aramaya uyan kullanıcı yok."}
+                          {rows.length === 0 ? t("adm.noUsers") : t("adm.noMatch")}
                         </td>
                       </tr>
                     )}
                   </tbody>
                 </table>
               </div>
-              <p className="mt-3 text-[11px] text-ink/45">
-                Şifreler scrypt (N=16384, 16 bayt rastgele salt, 64 bayt anahtar) ile hash&apos;lenmiştir; tabloda yalnız
-                algoritma özeti ve parmak izi görünür, hash veya şifre asla dışa aktarılmaz.
-              </p>
+              <p className="mt-3 text-[11px] text-ink/45">{t("adm.hashNote")}</p>
             </>
           )}
         </div>
