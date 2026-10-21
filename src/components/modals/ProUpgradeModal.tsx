@@ -146,7 +146,7 @@ function UpgradeDialog() {
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/60 p-4 backdrop-blur-xl print:hidden"
+      className="fixed inset-0 z-[2000] grid place-items-center overflow-y-auto bg-black/60 p-4 backdrop-blur-xl print:hidden"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -161,7 +161,7 @@ function UpgradeDialog() {
         exit={{ opacity: 0, y: 16, scale: 0.97 }}
         transition={SPRING_IN}
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-2xl overflow-hidden rounded-[2rem] border border-white/40 bg-white/80 text-ink shadow-[0_30px_80px_-20px_rgba(0,0,0,0.6)] backdrop-blur-2xl dark:border-white/15 dark:bg-slate-900/70"
+        className="relative flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-[2rem] border border-white/40 bg-white/80 text-ink shadow-[0_30px_80px_-20px_rgba(0,0,0,0.6)] backdrop-blur-2xl dark:border-white/15 dark:bg-slate-900/70"
       >
         <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-amber-400/25 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 -left-16 h-64 w-64 rounded-full bg-blue-500/20 blur-3xl" />
@@ -171,13 +171,14 @@ function UpgradeDialog() {
             type="button"
             onClick={close}
             aria-label="Kapat"
-            className="absolute right-4 top-4 z-10 grid h-9 w-9 place-items-center rounded-full glass-secondary text-ink/70"
+            className="absolute right-4 top-4 z-50 grid h-9 w-9 place-items-center rounded-full glass-secondary text-ink/70"
           >
             <X size={16} />
           </button>
         )}
 
-        <div className="relative p-6 md:p-8">
+        {/* Kaydırma iç kutuda → kapatma butonu sabit kalır */}
+        <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain p-6 md:p-8">
           <AnimatePresence mode="wait" initial={false}>
             {isPro && view !== "success" ? (
               <ProStatusView key="status" onDowngrade={() => setPro(false)} onClose={close} />

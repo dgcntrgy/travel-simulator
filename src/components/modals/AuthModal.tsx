@@ -92,7 +92,7 @@ function AuthDialog() {
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/60 p-4 backdrop-blur-xl print:hidden"
+      className="fixed inset-0 z-[2000] grid place-items-center overflow-y-auto bg-black/60 p-4 backdrop-blur-xl print:hidden"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}

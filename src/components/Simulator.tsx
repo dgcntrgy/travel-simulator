@@ -56,6 +56,25 @@ export default function Simulator() {
     document.documentElement.classList.toggle("dark", theme === "dark");
   }, [theme]);
 
+  // Tarayıcı geri tuşu: Adım > 0 iken geçmişte tek bir "bekçi" kayıt tutulur; geri basılınca siteden
+  // çıkmak yerine bu kayıt düşer ve bir önceki adıma dönülür (adım hâlâ > 0 ise bekçi yeniden eklenir).
+  useEffect(() => {
+    if (currentStep > 0 && !window.history.state?.tripGuard) {
+      window.history.pushState({ ...window.history.state, tripGuard: true }, "");
+    }
+  }, [currentStep]);
+
+  useEffect(() => {
+    const onPop = () => {
+      const { currentStep: step, prevStep } = useTripStore.getState();
+      // Adım 0'a uygulama içinden dönüldüyse artık bekçi gereksiz → normal geri davranışına devam
+      if (step > 0) prevStep();
+      else window.history.back();
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
   return (
     <div className="relative isolate flex h-dvh w-full flex-col bg-[#F8FAFC] text-slate-900 transition-colors duration-300 dark:bg-[#080C16] dark:text-white print:block print:h-auto print:bg-white">
       <DotGridBackdrop />

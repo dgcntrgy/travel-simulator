@@ -12,7 +12,6 @@ import {
   PlaneLanding,
   PlaneTakeoff,
   Route,
-  Sparkles,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
@@ -171,15 +170,9 @@ export default function LandingStep() {
       {/* Hero */}
       <motion.section variants={STAGGER_PARENT} initial="hidden" animate="show" className="relative z-50">
         <div className="mx-auto max-w-5xl px-4 pb-10 pt-14 text-center md:pt-20">
-          <motion.span
-            variants={RISE_ITEM}
-            className="inline-flex items-center gap-2 rounded-full border border-ink/10 bg-surface px-3 py-1 text-xs font-medium text-ink/70 shadow-sm"
-          >
-            <Sparkles size={13} className="text-blue-600 dark:text-blue-400" /> Ücretsiz seyahat simülatörü
-          </motion.span>
           <motion.h1
             variants={RISE_ITEM}
-            className="mx-auto mt-5 max-w-3xl text-4xl font-bold leading-[1.1] tracking-tight text-ink md:text-6xl"
+            className="mx-auto max-w-3xl text-4xl font-bold leading-[1.1] tracking-tight text-ink md:text-6xl"
           >
             Hayalindeki seyahati <span className="text-blue-600 dark:text-blue-400">adım adım</span> planla.
           </motion.h1>
@@ -188,7 +181,7 @@ export default function LandingStep() {
             className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-ink/60 md:text-lg"
           >
             Uçuşunu seç, gezilecek yerleri hikayeleriyle keşfet; otel bölgesi, gün planı ve bütçen otomatik
-            oluşsun. Kredi kartı yok, kayıt yok.
+            oluşsun.
           </motion.p>
 
           <motion.div variants={RISE_ITEM} className="relative z-50 mt-9">

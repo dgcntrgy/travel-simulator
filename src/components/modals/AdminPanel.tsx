@@ -95,7 +95,7 @@ function AdminDialog() {
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/60 p-3 backdrop-blur-xl sm:p-4 print:hidden"
+      className="fixed inset-0 z-[2000] grid place-items-center overflow-y-auto bg-black/60 p-3 backdrop-blur-xl sm:p-4 print:hidden"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}

@@ -105,7 +105,7 @@ function BudgetCounter() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.18 }}
-            className="card absolute right-0 top-full z-40 mt-2 w-64 max-w-[calc(100vw-1.5rem)] rounded-2xl p-4"
+            className="card absolute right-0 top-full z-[999] mt-2 w-64 max-w-[calc(100vw-1.5rem)] rounded-2xl p-4"
           >
             <p className="mb-3 text-xs font-medium uppercase tracking-[0.14em] text-ink/50">Bütçe Dökümü</p>
             <ul className="space-y-2 text-sm">
@@ -438,7 +438,7 @@ export default function TopBar() {
   const setStep = useTripStore((s) => s.setStep);
 
   return (
-    <header className="sticky top-0 z-30 shrink-0 print:hidden border-b border-ink/10 bg-white/80 backdrop-blur-xl dark:bg-[#080C16]/80">
+    <header className="sticky top-0 z-[1000] shrink-0 print:hidden border-b border-ink/10 bg-white/80 backdrop-blur-xl dark:bg-[#080C16]/80">
       {/* Masaüstü: tek satır (logo · adımlar · kontroller). Mobil/tablet: 1. satır logo + kontroller, 2. satır adımlar + istatistik */}
       <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-x-2 gap-y-2 px-3 py-2 sm:gap-x-3 sm:px-4 md:px-6 lg:h-16 lg:flex-nowrap lg:py-0">
         <button
